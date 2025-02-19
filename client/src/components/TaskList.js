@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { initializeNotifications, showNotification } from '../notifications';
 import {
   Box,
   Paper,
@@ -64,8 +65,8 @@ function TaskList() {
 
   useEffect(() => {
     fetchTasks();
+    initializeNotifications();
 
-    // הגדרת מאזין לשינויים בזמן אמת
     const subscription = supabase
       .channel('tasks-channel')
       .on('postgres_changes', 
@@ -77,10 +78,24 @@ function TaskList() {
         (payload) => {
           console.log('שינוי התקבל:', payload);
           fetchTasks(); // טעינה מחדש של המשימות
+          
+          // הצג התראה כשנוספת משימה חדשה
+          if (payload.eventType === 'INSERT') {
+            showNotification('משימה חדשה נוספה', {
+              body: `משימה חדשה: ${payload.new.title}`,
+              dir: 'rtl'
+            });
+          }
+          // הצג התראה כשמשימה עודכנה
+          else if (payload.eventType === 'UPDATE') {
+            showNotification('משימה עודכנה', {
+              body: `משימה עודכנה: ${payload.new.title}`,
+              dir: 'rtl'
+            });
+          }
       })
       .subscribe();
 
-    // ניקוי המאזין כשהקומפוננטה מתפרקת
     return () => {
       subscription.unsubscribe();
     };
