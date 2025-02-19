@@ -21,13 +21,26 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
   "theme_color": "#1976d2",
   "background_color": "#ffffff",
-  "orientation": "portrait",
-  "scope": "/",
+  "orientation": "any",
+  "categories": ["productivity", "utilities"],
   "prefer_related_applications": false,
   "dir": "rtl",
-  "lang": "he"
+  "lang": "he",
+  "scope": "/",
+  "shortcuts": [
+    {
+      "name": "משימות",
+      "url": "/tasks",
+      "description": "צפייה במשימות"
+    },
+    {
+      "name": "ציוד",
+      "url": "/equipment",
+      "description": "מעקב ציוד"
+    }
+  ]
 }

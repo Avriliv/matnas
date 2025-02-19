@@ -22,18 +22,25 @@ root.render(
   </React.StrictMode>
 );
 
-// רישום ה-Service Worker כדי לאפשר התקנה של האפליקציה
-serviceWorkerRegistration.register({
-  onUpdate: registration => {
-    // כשיש עדכון חדש
-    const waitingServiceWorker = registration.waiting;
-    if (waitingServiceWorker) {
-      waitingServiceWorker.addEventListener("statechange", event => {
-        if (event.target.state === "activated") {
-          window.location.reload();
+// רישום ה-Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    serviceWorkerRegistration.register({
+      onSuccess: registration => {
+        console.log('PWA registration successful');
+      },
+      onUpdate: registration => {
+        console.log('New content is available; please refresh.');
+        const waitingServiceWorker = registration.waiting;
+        if (waitingServiceWorker) {
+          waitingServiceWorker.addEventListener("statechange", event => {
+            if (event.target.state === "activated") {
+              window.location.reload();
+            }
+          });
+          waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
         }
-      });
-      waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
-    }
-  }
-});
+      }
+    });
+  });
+}
