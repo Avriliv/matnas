@@ -56,6 +56,26 @@ function InventoryList() {
 
   useEffect(() => {
     fetchInventory();
+
+    // הגדרת מאזין לשינויים בזמן אמת
+    const subscription = supabase
+      .channel('inventory-channel')
+      .on('postgres_changes', 
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory'
+        }, 
+        (payload) => {
+          console.log('שינוי במלאי התקבל:', payload);
+          fetchInventory(); // טעינה מחדש של המלאי
+      })
+      .subscribe();
+
+    // ניקוי המאזין כשהקומפוננטה מתפרקת
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchInventory() {

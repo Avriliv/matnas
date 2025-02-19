@@ -64,6 +64,26 @@ function TaskList() {
 
   useEffect(() => {
     fetchTasks();
+
+    // הגדרת מאזין לשינויים בזמן אמת
+    const subscription = supabase
+      .channel('tasks-channel')
+      .on('postgres_changes', 
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        }, 
+        (payload) => {
+          console.log('שינוי התקבל:', payload);
+          fetchTasks(); // טעינה מחדש של המשימות
+      })
+      .subscribe();
+
+    // ניקוי המאזין כשהקומפוננטה מתפרקת
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchTasks() {
