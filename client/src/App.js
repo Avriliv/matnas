@@ -6,13 +6,13 @@ import {
   Tabs,
   Tab,
   ThemeProvider,
-  createTheme,
   useMediaQuery
 } from '@mui/material';
+import { createTheme } from '@mui/material/styles';
 import TaskList from './components/TaskList';
 import InventoryList from './components/InventoryList';
 import EquipmentTracker from './components/EquipmentTracker';
-import Calendar from './components/Calendar';
+import SimpleCalendar from './components/SimpleCalendar';
 import DepartmentEvents from './components/DepartmentEvents';
 import EducationDates from './components/EducationDates';
 import rtlPlugin from 'stylis-plugin-rtl';
@@ -30,6 +30,14 @@ const theme = createTheme({
   direction: 'rtl',
   typography: {
     fontFamily: 'Assistant, Arial, sans-serif',
+  },
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    background: {
+      default: '#f5f5f5',
+    },
   },
 });
 
@@ -102,7 +110,7 @@ function App() {
               >
                 <Tab label="משימות" />
                 <Tab label="מלאי והזמנות" />
-                <Tab label="ציוד" />
+                <Tab label="מעקב ציוד" />
                 <Tab label="לוח שנה" />
                 <Tab label="אירועי מחלקה" />
                 <Tab label="חופשות וחגים" />
@@ -122,7 +130,7 @@ function App() {
                   <EquipmentTracker />
                 </TabPanel>
                 <TabPanel value={currentTab} index={3}>
-                  <Calendar />
+                  <SimpleCalendar />
                 </TabPanel>
                 <TabPanel value={currentTab} index={4}>
                   <DepartmentEvents />
