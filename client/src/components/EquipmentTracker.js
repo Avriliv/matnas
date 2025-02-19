@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import SignaturePad from 'react-signature-canvas';
 import {
   Box,
   Button,
@@ -8,32 +7,50 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
+  Paper,
+  Typography,
+  IconButton,
+  ButtonGroup,
+  Menu,
+  MenuItem,
+  Stack,
+  Alert,
+  Snackbar,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Typography,
   FormControl,
   InputLabel,
-  Select,
-  MenuItem,
-  IconButton,
+  Select
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
+} from '@mui/icons-material';
+import ShareIcon from '@mui/icons-material/Share';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import SignaturePad from 'react-signature-canvas';
 import { supabase } from '../supabaseClient';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+
+// הגדרת פונט עברי
 
 const staffMembers = ['אברי', 'בעז'];
 
 function EquipmentTracker() {
   const [equipment, setEquipment] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [shareAnchorEl, setShareAnchorEl] = useState(null);
   const [newItem, setNewItem] = useState({
     item_name: '',
-    container_number: '',
+    quantity: 1,
     checkout_date: new Date().toISOString().split('T')[0],
     staff_member: '',
     borrower_name: '',
@@ -41,36 +58,114 @@ function EquipmentTracker() {
     signature: null
   });
   const [errors, setErrors] = useState({});
+  const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const signatureRef = useRef();
 
   useEffect(() => {
     fetchEquipment();
   }, []);
 
+  const showAlert = (message, severity = 'success') => {
+    setAlert({ open: true, message, severity });
+  };
+
+  const handleCloseAlert = () => {
+    setAlert({ ...alert, open: false });
+  };
+
   const fetchEquipment = async () => {
     try {
       const { data, error } = await supabase
-        .from('equipment')
+        .from('equipment_tracking')
         .select('*')
         .order('checkout_date', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        showAlert('שגיאה בטעינת הציוד', 'error');
+        throw error;
+      }
       setEquipment(data || []);
     } catch (error) {
       console.error('Error fetching equipment:', error);
+      showAlert('שגיאה בטעינת הציוד', 'error');
     }
   };
 
   const validateForm = () => {
     const errors = {};
-    if (!newItem.item_name) errors.item_name = 'נדרש למלא שם פריט';
-    if (!newItem.container_number) errors.container_number = 'נדרש לבחור מכולה';
+    if (!newItem.item_name?.trim()) errors.item_name = 'נדרש למלא שם פריט';
+    if (!newItem.quantity || newItem.quantity < 1) errors.quantity = 'נדרש להזין כמות חוקית';
     if (!newItem.staff_member) errors.staff_member = 'נדרש לבחור איש צוות';
-    if (!newItem.borrower_name) errors.borrower_name = 'נדרש למלא שם שואל';
+    if (!newItem.borrower_name?.trim()) errors.borrower_name = 'נדרש למלא שם שואל';
     if (!newItem.checkout_date) errors.checkout_date = 'נדרש למלא תאריך משיכה';
     
     setErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      showAlert('נא למלא את כל השדות החובה', 'error');
+      return;
+    }
+
+    try {
+      let signature = null;
+      if (signatureRef.current && !signatureRef.current.isEmpty()) {
+        signature = signatureRef.current.toDataURL();
+      }
+
+      // Create base item data
+      const itemData = {
+        item_name: newItem.item_name.trim(),
+        checkout_date: newItem.checkout_date,
+        staff_member: newItem.staff_member,
+        borrower_name: newItem.borrower_name.trim(),
+        notes: newItem.notes?.trim() || '',
+        signature: signature
+      };
+
+      // Add quantity only if the column exists
+      try {
+        const { data: columns } = await supabase
+          .from('equipment_tracking')
+          .select()
+          .limit(1);
+        
+        if (columns && columns[0] && 'quantity' in columns[0]) {
+          itemData.quantity = parseInt(newItem.quantity) || 1;
+        }
+      } catch (e) {
+        console.warn('Could not verify quantity column:', e);
+      }
+
+      let error;
+      if (newItem.id) {
+        const { error: updateError } = await supabase
+          .from('equipment_tracking')
+          .update(itemData)
+          .eq('id', newItem.id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('equipment_tracking')
+          .insert([itemData]);
+        error = insertError;
+      }
+
+      if (error) {
+        console.error('Supabase error:', error);
+        showAlert('שגיאה בשמירת הפריט: ' + error.message, 'error');
+        throw error;
+      }
+
+      showAlert(newItem.id ? 'הפריט עודכן בהצלחה' : 'הפריט נוסף בהצלחה', 'success');
+      handleCloseDialog();
+      fetchEquipment();
+    } catch (error) {
+      console.error('Error saving equipment:', error);
+      showAlert('שגיאה בשמירת הפריט: ' + (error.message || error), 'error');
+    }
   };
 
   const handleOpenDialog = () => {
@@ -85,49 +180,13 @@ function EquipmentTracker() {
     setOpenDialog(false);
     setNewItem({
       item_name: '',
-      container_number: '',
+      quantity: 1,
       checkout_date: new Date().toISOString().split('T')[0],
       staff_member: '',
       borrower_name: '',
       notes: '',
       signature: null
     });
-  };
-
-  const handleSubmit = async () => {
-    if (!validateForm()) return;
-
-    try {
-      const signature = signatureRef.current?.isEmpty()
-        ? null
-        : signatureRef.current?.getTrimmedCanvas().toDataURL('image/png');
-
-      const itemData = {
-        ...newItem,
-        signature
-      };
-
-      let error;
-      if (newItem.id) {
-        const { error: updateError } = await supabase
-          .from('equipment')
-          .update(itemData)
-          .eq('id', newItem.id);
-        error = updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('equipment')
-          .insert([itemData]);
-        error = insertError;
-      }
-
-      if (error) throw error;
-
-      handleCloseDialog();
-      fetchEquipment();
-    } catch (error) {
-      console.error('Error saving equipment:', error);
-    }
   };
 
   const handleEditItem = (item) => {
@@ -144,7 +203,7 @@ function EquipmentTracker() {
   const handleDeleteItem = async (id) => {
     try {
       const { error } = await supabase
-        .from('equipment')
+        .from('equipment_tracking')
         .delete()
         .eq('id', id);
 
@@ -152,27 +211,97 @@ function EquipmentTracker() {
       fetchEquipment();
     } catch (error) {
       console.error('Error deleting equipment:', error);
+      showAlert('שגיאה במחיקת הפריט', 'error');
     }
+  };
+
+  const exportToCSV = () => {
+    // הכנת כותרות העמודות
+    const headers = ['שם הפריט', 'כמות', 'תאריך משיכה', 'איש צוות', 'שם השואל', 'הערות'];
+    
+    // הכנת שורות הנתונים
+    const rows = equipment.map(item => [
+      item.item_name,
+      item.quantity || '1',
+      new Date(item.checkout_date).toLocaleDateString('he-IL'),
+      item.staff_member,
+      item.borrower_name,
+      item.notes || ''
+    ]);
+
+    // יצירת תוכן ה-CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // יצירת ה-Blob עם BOM כדי שהעברית תוצג נכון
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { 
+      type: 'text/csv;charset=utf-8' 
+    });
+
+    // הורדת הקובץ
+    saveAs(blob, 'מעקב_ציוד.csv');
+  };
+
+  const shareViaWhatsApp = () => {
+    const text = encodeURIComponent(`מעקב ציוד:\n\n${equipment.map(item => 
+      `שם הפריט: ${item.item_name}\nכמות: ${item.quantity || 1}\nתאריך משיכה: ${new Date(item.checkout_date).toLocaleDateString('he-IL')}\nאיש צוות: ${item.staff_member}\nשם השואל: ${item.borrower_name}\n${item.notes ? `הערות: ${item.notes}\n` : ''}\n`
+    ).join('\n')}`);
+    window.open(`https://wa.me/?text=${text}`);
+    setShareAnchorEl(null);
+  };
+
+  const shareViaEmail = () => {
+    const subject = encodeURIComponent('מעקב ציוד');
+    const body = encodeURIComponent(`מעקב ציוד:\n\n${equipment.map(item => 
+      `שם הפריט: ${item.item_name}\nכמות: ${item.quantity || 1}\nתאריך משיכה: ${new Date(item.checkout_date).toLocaleDateString('he-IL')}\nאיש צוות: ${item.staff_member}\nשם השואל: ${item.borrower_name}\n${item.notes ? `הערות: ${item.notes}\n` : ''}\n`
+    ).join('\n')}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    setShareAnchorEl(null);
   };
 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6">ציוד</Typography>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Typography variant="h6">מעקב ציוד</Typography>
+          <ButtonGroup variant="contained" size="small">
+            <Button startIcon={<GetAppIcon />} onClick={exportToCSV}>
+              ייצא לקובץ
+            </Button>
+            <Button
+              startIcon={<ShareIcon />}
+              onClick={(e) => setShareAnchorEl(e.currentTarget)}
+            >
+              שתף
+            </Button>
+          </ButtonGroup>
+        </Box>
         <Button
           variant="contained"
+          startIcon={<AddIcon />}
           onClick={handleOpenDialog}
         >
           הוסף פריט חדש
         </Button>
       </Box>
 
+      <Menu
+        anchorEl={shareAnchorEl}
+        open={Boolean(shareAnchorEl)}
+        onClose={() => setShareAnchorEl(null)}
+      >
+        <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
+        <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
+      </Menu>
+
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>שם הפריט</TableCell>
-              <TableCell>מכולה</TableCell>
+              <TableCell>כמות</TableCell>
               <TableCell>תאריך משיכה</TableCell>
               <TableCell>איש צוות</TableCell>
               <TableCell>שם השואל</TableCell>
@@ -185,31 +314,21 @@ function EquipmentTracker() {
             {equipment.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>{item.item_name}</TableCell>
-                <TableCell>{item.container_number}</TableCell>
-                <TableCell>
-                  {new Date(item.checkout_date).toLocaleDateString('he-IL', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                  })}
-                </TableCell>
+                <TableCell>{item.quantity || 1}</TableCell>
+                <TableCell>{new Date(item.checkout_date).toLocaleDateString('he-IL')}</TableCell>
                 <TableCell>{item.staff_member}</TableCell>
                 <TableCell>{item.borrower_name}</TableCell>
                 <TableCell>{item.notes}</TableCell>
                 <TableCell>
                   {item.signature && (
-                    <img
-                      src={item.signature}
-                      alt="חתימה"
-                      style={{ width: '60px', height: '30px', objectFit: 'contain' }}
-                    />
+                    <img src={item.signature} alt="חתימה" style={{ maxWidth: 100, maxHeight: 50 }} />
                   )}
                 </TableCell>
                 <TableCell>
-                  <IconButton onClick={() => handleEditItem(item)}>
+                  <IconButton onClick={() => handleEditItem(item)} size="small">
                     <EditIcon />
                   </IconButton>
-                  <IconButton onClick={() => handleDeleteItem(item.id)}>
+                  <IconButton onClick={() => handleDeleteItem(item.id)} size="small">
                     <DeleteIcon />
                   </IconButton>
                 </TableCell>
@@ -219,8 +338,8 @@ function EquipmentTracker() {
         </Table>
       </TableContainer>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>{newItem.id ? 'עריכת פריט' : 'הוספת פריט חדש'}</DialogTitle>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+        <DialogTitle>{newItem.id ? 'ערוך פריט' : 'הוסף פריט חדש'}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <TextField
@@ -230,22 +349,17 @@ function EquipmentTracker() {
               error={!!errors.item_name}
               helperText={errors.item_name}
               required
-              fullWidth
             />
-
-            <FormControl fullWidth required>
-              <InputLabel>מכולה</InputLabel>
-              <Select
-                value={newItem.container_number}
-                label="מכולה"
-                onChange={(e) => setNewItem({ ...newItem, container_number: e.target.value })}
-                error={!!errors.container_number}
-              >
-                <MenuItem value="1">מכולה 1</MenuItem>
-                <MenuItem value="2">מכולה 2</MenuItem>
-              </Select>
-            </FormControl>
-
+            <TextField
+              label="כמות"
+              type="number"
+              value={newItem.quantity}
+              onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 0 })}
+              error={!!errors.quantity}
+              helperText={errors.quantity}
+              required
+              InputProps={{ inputProps: { min: 1 } }}
+            />
             <TextField
               label="תאריך משיכה"
               type="date"
@@ -254,24 +368,21 @@ function EquipmentTracker() {
               error={!!errors.checkout_date}
               helperText={errors.checkout_date}
               required
-              fullWidth
-              InputLabelProps={{ shrink: true }}
             />
-
-            <FormControl fullWidth required>
+            <FormControl error={!!errors.staff_member} required>
               <InputLabel>איש צוות</InputLabel>
               <Select
                 value={newItem.staff_member}
-                label="איש צוות"
                 onChange={(e) => setNewItem({ ...newItem, staff_member: e.target.value })}
-                error={!!errors.staff_member}
+                label="איש צוות"
               >
                 {staffMembers.map((member) => (
-                  <MenuItem key={member} value={member}>{member}</MenuItem>
+                  <MenuItem key={member} value={member}>
+                    {member}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
-
             <TextField
               label="שם השואל"
               value={newItem.borrower_name}
@@ -279,30 +390,26 @@ function EquipmentTracker() {
               error={!!errors.borrower_name}
               helperText={errors.borrower_name}
               required
-              fullWidth
             />
-
             <TextField
               label="הערות"
               value={newItem.notes}
               onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
               multiline
-              rows={2}
-              fullWidth
+              rows={3}
             />
-
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                חתימת השואל
+            <Box sx={{ border: '1px solid #ccc', p: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                חתימה
               </Typography>
               <SignaturePad
                 ref={signatureRef}
                 canvasProps={{
                   className: 'signature-canvas',
-                  style: { width: '100%', height: '150px', border: '1px solid #ccc' }
+                  style: { width: '100%', height: '150px' }
                 }}
               />
-              <Button onClick={() => signatureRef.current?.clear()} size="small" sx={{ mt: 1 }}>
+              <Button size="small" onClick={() => signatureRef.current?.clear()}>
                 נקה חתימה
               </Button>
             </Box>
@@ -315,6 +422,17 @@ function EquipmentTracker() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={alert.open}
+        autoHideDuration={6000}
+        onClose={handleCloseAlert}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseAlert} severity={alert.severity}>
+          {alert.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

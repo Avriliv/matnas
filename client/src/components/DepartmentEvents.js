@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+
 import {
   Box,
   Paper,
@@ -20,12 +25,16 @@ import {
   ListItemSecondaryAction,
   IconButton,
   Chip,
-  Divider
+  Divider,
+  ButtonGroup,
+  Menu
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Share as ShareIcon,
+  GetApp as GetAppIcon
 } from '@mui/icons-material';
 
 const eventTypes = [
@@ -39,6 +48,7 @@ const eventTypes = [
 function DepartmentEvents() {
   const [events, setEvents] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [shareAnchorEl, setShareAnchorEl] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const [loading, setLoading] = useState(true);
@@ -182,6 +192,64 @@ function DepartmentEvents() {
     return `${start} - ${end}`;
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(14);
+    doc.text("משימות מתנ״ס", 14, 20);
+
+    const tableData = events.map(event => [
+      event.title,
+      event.type,
+      new Date(event.start_date).toLocaleDateString('he-IL'),
+      event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : '',
+      event.description || ''
+    ]);
+
+    doc.autoTable({
+      head: [['כותרת', 'סוג', 'תאריך התחלה', 'תאריך סיום', 'תיאור']],
+      body: tableData,
+      startY: 30,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 10 },
+      headStyles: { fillColor: [25, 118, 210] }
+    });
+
+    doc.save('משימות_מתנס.pdf');
+  };
+
+  const exportToExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(events.map(event => ({
+      'כותרת': event.title,
+      'סוג': event.type,
+      'תאריך התחלה': new Date(event.start_date).toLocaleDateString('he-IL'),
+      'תאריך סיום': event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : '',
+      'תיאור': event.description || ''
+    })));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "משימות");
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([excelBuffer]), 'משימות_מתנס.xlsx');
+  };
+
+  const shareViaWhatsApp = () => {
+    const text = encodeURIComponent(`משימות מתנ״ס:\n\n${events.map(event => 
+      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך התחלה: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתאריך סיום: ${event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : ''}\nתיאור: ${event.description || ''}\n`
+    ).join('\n')}`);
+    window.open(`https://wa.me/?text=${text}`);
+    setShareAnchorEl(null);
+  };
+
+  const shareViaEmail = () => {
+    const subject = encodeURIComponent('משימות מתנ״ס');
+    const body = encodeURIComponent(`משימות מתנ״ס:\n\n${events.map(event => 
+      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך התחלה: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתאריך סיום: ${event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : ''}\nתיאור: ${event.description || ''}\n`
+    ).join('\n')}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    setShareAnchorEl(null);
+  };
+
   return (
     <Box>
       <Snackbar
@@ -196,7 +264,23 @@ function DepartmentEvents() {
 
       <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5">אירועי המחלקה</Typography>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Typography variant="h5">אירועי המחלקה</Typography>
+            <ButtonGroup variant="contained" size="small">
+              <Button startIcon={<GetAppIcon />} onClick={exportToPDF}>
+                PDF
+              </Button>
+              <Button onClick={exportToExcel}>
+                Excel
+              </Button>
+              <Button
+                startIcon={<ShareIcon />}
+                onClick={(e) => setShareAnchorEl(e.currentTarget)}
+              >
+                שתף
+              </Button>
+            </ButtonGroup>
+          </Box>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -205,6 +289,15 @@ function DepartmentEvents() {
             הוסף אירוע
           </Button>
         </Box>
+
+        <Menu
+          anchorEl={shareAnchorEl}
+          open={Boolean(shareAnchorEl)}
+          onClose={() => setShareAnchorEl(null)}
+        >
+          <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
+          <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
+        </Menu>
 
         {loading ? (
           <Typography>טוען אירועים...</Typography>

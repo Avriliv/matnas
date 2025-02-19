@@ -1,36 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
-import { initializeNotifications, showNotification } from '../notifications';
 import {
   Box,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  Fab,
-  Typography,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   TextField,
-  Stack,
-  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton,
+  ButtonGroup,
+  Menu,
   Snackbar,
   Checkbox,
   Autocomplete,
-  MenuItem
+  List,
+  ListItem,
+  ListItemText,
+  Fab,
+  Chip,
+  Stack,
+  Alert
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Share as ShareIcon,
+  GetApp as GetAppIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
+import { supabase } from '../supabaseClient';
+import { initializeNotifications, showNotification } from '../notifications';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+
+// הגדרת פונט עברי
+// pdfMake.fonts = {
+//   Rubik: {
+//     normal: 'Rubik',
+//     bold: 'Rubik-Bold',
+//   },
+//   Helvetica: {
+//     normal: 'Helvetica',
+//     bold: 'Helvetica-Bold',
+//   }
+// };
 
 const taskTypes = [
   'משימה',
@@ -62,6 +89,7 @@ function TaskList() {
     date: '',
     description: ''
   });
+  const [shareAnchorEl, setShareAnchorEl] = useState(null);
 
   useEffect(() => {
     fetchTasks();
@@ -240,8 +268,86 @@ function TaskList() {
     setTasks(updatedTasks);
   };
 
+  const exportToCSV = () => {
+    // הכנת כותרות העמודות
+    const headers = ['כותרת', 'תיאור', 'סוג', 'תאריך', 'תת-משימות'];
+    
+    // הכנת שורות הנתונים
+    const rows = tasks.map(task => [
+      task.title,
+      task.description || '',
+      task.type,
+      task.date ? new Date(task.date).toLocaleDateString('he-IL') : '',
+      task.subtasks && task.subtasks.length > 0 ? 'כן' : 'לא'
+    ]);
+
+    // יצירת תוכן ה-CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // יצירת ה-Blob עם BOM כדי שהעברית תוצג נכון
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { 
+      type: 'text/csv;charset=utf-8' 
+    });
+
+    // הורדת הקובץ
+    saveAs(blob, 'משימות.csv');
+  };
+
+  const shareViaWhatsApp = () => {
+    const text = encodeURIComponent(`משימות:\n\n${tasks.map(task => 
+      `כותרת: ${task.title}\nתיאור: ${task.description || ''}\nסוג: ${task.type}\nתאריך: ${task.date ? new Date(task.date).toLocaleDateString('he-IL') : ''}\nתת-משימות: ${task.subtasks && task.subtasks.length > 0 ? 'כן' : 'לא'}\n`
+    ).join('\n')}`);
+    window.open(`https://wa.me/?text=${text}`);
+    setShareAnchorEl(null);
+  };
+
+  const shareViaEmail = () => {
+    const subject = encodeURIComponent('משימות');
+    const body = encodeURIComponent(`משימות:\n\n${tasks.map(task => 
+      `כותרת: ${task.title}\nתיאור: ${task.description || ''}\nסוג: ${task.type}\nתאריך: ${task.date ? new Date(task.date).toLocaleDateString('he-IL') : ''}\nתת-משימות: ${task.subtasks && task.subtasks.length > 0 ? 'כן' : 'לא'}\n`
+    ).join('\n')}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    setShareAnchorEl(null);
+  };
+
   return (
     <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Typography variant="h6">משימות</Typography>
+          <ButtonGroup variant="contained" size="small">
+            <Button startIcon={<GetAppIcon />} onClick={exportToCSV}>
+              ייצא לקובץ
+            </Button>
+            <Button
+              startIcon={<ShareIcon />}
+              onClick={(e) => setShareAnchorEl(e.currentTarget)}
+            >
+              שתף
+            </Button>
+          </ButtonGroup>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleOpenDialog}
+        >
+          הוסף משימה חדשה
+        </Button>
+      </Box>
+
+      <Menu
+        anchorEl={shareAnchorEl}
+        open={Boolean(shareAnchorEl)}
+        onClose={() => setShareAnchorEl(null)}
+      >
+        <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
+        <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
+      </Menu>
+
       <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
         <Typography variant="h6" gutterBottom>
           משימות
@@ -285,28 +391,30 @@ function TaskList() {
                     תתי משימות:
                   </Typography>
                   {task.subtasks.map((subtask, index) => (
-                    <Box key={index} sx={{ ml: 2, mb: 1 }}>
-                      <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        • {subtask.title}
-                        {subtask.assignee && (
-                          <Chip
-                            label={subtask.assignee}
-                            size="small"
-                            color="secondary"
-                            variant="outlined"
-                          />
+                    <Box key={index} sx={{ border: '1px solid #ddd', p: 2, borderRadius: 1 }}>
+                      <Stack spacing={2}>
+                        <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          • {subtask.title}
+                          {subtask.assignee && (
+                            <Chip
+                              label={subtask.assignee}
+                              size="small"
+                              color="secondary"
+                              variant="outlined"
+                            />
+                          )}
+                        </Typography>
+                        {subtask.date && (
+                          <Typography variant="caption" color="text.secondary">
+                            תאריך: {new Date(subtask.date).toLocaleDateString('he-IL')}
+                          </Typography>
                         )}
-                      </Typography>
-                      {subtask.date && (
-                        <Typography variant="caption" color="text.secondary">
-                          תאריך: {new Date(subtask.date).toLocaleDateString('he-IL')}
-                        </Typography>
-                      )}
-                      {subtask.description && (
-                        <Typography variant="body2" color="text.secondary">
-                          {subtask.description}
-                        </Typography>
-                      )}
+                        {subtask.description && (
+                          <Typography variant="body2" color="text.secondary">
+                            {subtask.description}
+                          </Typography>
+                        )}
+                      </Stack>
                     </Box>
                   ))}
                 </Box>

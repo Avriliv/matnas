@@ -5,6 +5,7 @@ import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import { prefixer } from 'stylis';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 // יצירת קונפיגורציה ל-RTL
 const cacheRtl = createCache({
@@ -20,3 +21,18 @@ root.render(
     </CacheProvider>
   </React.StrictMode>
 );
+
+// רישום ה-Service Worker
+serviceWorkerRegistration.register({
+  onUpdate: registration => {
+    const waitingServiceWorker = registration.waiting;
+    if (waitingServiceWorker) {
+      waitingServiceWorker.addEventListener("statechange", event => {
+        if (event.target.state === "activated") {
+          window.location.reload();
+        }
+      });
+      waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
+    }
+  },
+});
