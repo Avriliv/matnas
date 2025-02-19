@@ -15,7 +15,6 @@ import EquipmentTracker from './components/EquipmentTracker';
 import Calendar from './components/Calendar';
 import DepartmentEvents from './components/DepartmentEvents';
 import EducationDates from './components/EducationDates';
-import { createTheme } from '@mui/material/styles';
 import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
@@ -34,19 +33,16 @@ const theme = createTheme({
   },
 });
 
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
+function TabPanel({ children, value, index }) {
   return (
     <div
       role="tabpanel"
       hidden={value !== index}
       id={`tabpanel-${index}`}
       aria-labelledby={`tab-${index}`}
-      style={{ height: '100%', overflow: 'auto' }}
-      {...other}
     >
       {value === index && (
-        <Box sx={{ p: 3, height: '100%' }}>
+        <Box sx={{ p: 3 }}>
           {children}
         </Box>
       )}
