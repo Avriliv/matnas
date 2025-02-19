@@ -22,9 +22,10 @@ root.render(
   </React.StrictMode>
 );
 
-// רישום ה-Service Worker
+// רישום ה-Service Worker כדי לאפשר התקנה של האפליקציה
 serviceWorkerRegistration.register({
   onUpdate: registration => {
+    // כשיש עדכון חדש
     const waitingServiceWorker = registration.waiting;
     if (waitingServiceWorker) {
       waitingServiceWorker.addEventListener("statechange", event => {
@@ -34,5 +35,5 @@ serviceWorkerRegistration.register({
       });
       waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
     }
-  },
+  }
 });
