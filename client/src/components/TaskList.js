@@ -95,8 +95,9 @@ function TaskList() {
     fetchTasks();
     initializeNotifications();
 
-    const subscription = supabase
-      .channel('tasks-channel')
+    // הגדרת ערוץ Supabase בזמן אמת
+    const channel = supabase
+      .channel('tasks-changes')
       .on('postgres_changes', 
         {
           event: '*',
@@ -104,28 +105,47 @@ function TaskList() {
           table: 'tasks'
         }, 
         (payload) => {
-          console.log('שינוי התקבל:', payload);
-          fetchTasks(); // טעינה מחדש של המשימות
+          console.log('שינוי התקבל בזמן אמת:', payload);
           
-          // הצג התראה כשנוספת משימה חדשה
+          // עדכון מיידי של המשימות
           if (payload.eventType === 'INSERT') {
+            console.log('משימה חדשה נוספה:', payload.new);
+            setTasks(currentTasks => [payload.new, ...currentTasks]);
             showNotification('משימה חדשה נוספה', {
               body: `משימה חדשה: ${payload.new.title}`,
               dir: 'rtl'
             });
-          }
-          // הצג התראה כשמשימה עודכנה
+          } 
           else if (payload.eventType === 'UPDATE') {
+            console.log('משימה עודכנה:', payload.new);
+            setTasks(currentTasks => 
+              currentTasks.map(task => 
+                task.id === payload.new.id ? payload.new : task
+              )
+            );
             showNotification('משימה עודכנה', {
               body: `משימה עודכנה: ${payload.new.title}`,
               dir: 'rtl'
             });
           }
-      })
-      .subscribe();
+          else if (payload.eventType === 'DELETE') {
+            console.log('משימה נמחקה:', payload.old);
+            setTasks(currentTasks => 
+              currentTasks.filter(task => task.id !== payload.old.id)
+            );
+          }
+      });
+
+    // התחברות לערוץ
+    channel.subscribe(status => {
+      console.log('סטטוס התחברות לערוץ:', status);
+      if (status === 'SUBSCRIBED') {
+        console.log('מחובר בהצלחה לעדכונים בזמן אמת');
+      }
+    });
 
     return () => {
-      subscription.unsubscribe();
+      channel.unsubscribe();
     };
   }, []);
 
