@@ -66,8 +66,13 @@ const TaskList = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!title || !type || !date || !status) {
+      alert('נא למלא את כל השדות החובה');
+      return;
+    }
+    
     try {
-      if (editTask) {
+      if (editTask && editTask.id) {
         const { error } = await supabase
           .from('tasks')
           .update({
@@ -101,6 +106,7 @@ const TaskList = () => {
       fetchTasks();
     } catch (error) {
       console.error('Error saving task:', error);
+      alert('אירעה שגיאה בשמירת המשימה');
     }
   };
 
