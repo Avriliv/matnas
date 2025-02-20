@@ -64,6 +64,42 @@ registerRoute(
   })
 );
 
+// Cache של קבצי JSON (כולל manifest.json)
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && url.pathname.endsWith('.json'),
+  new StaleWhileRevalidate({
+    cacheName: 'json-files',
+    plugins: [
+      new ExpirationPlugin({ maxEntries: 50 }),
+    ],
+  })
+);
+
+// Cache של קבצי אייקונים
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && (
+    url.pathname.endsWith('.ico') || 
+    url.pathname.endsWith('.png')
+  ),
+  new StaleWhileRevalidate({
+    cacheName: 'icons',
+    plugins: [
+      new ExpirationPlugin({ maxEntries: 50 }),
+    ],
+  })
+);
+
+// Cache של Supabase API requests
+registerRoute(
+  ({ url }) => url.origin === 'https://djdgitqpcjpnigatdadq.supabase.co',
+  new StaleWhileRevalidate({
+    cacheName: 'supabase-api',
+    plugins: [
+      new ExpirationPlugin({ maxEntries: 50 }),
+    ],
+  })
+);
+
 // This allows the web app to trigger skipWaiting via
 // registration.waiting.postMessage({type: 'SKIP_WAITING'})
 self.addEventListener('message', (event) => {
