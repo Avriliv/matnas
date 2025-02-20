@@ -27,7 +27,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "set \"GENERATE_SOURCEMAP=false\" && react-scripts build && copy /y public\\manifest.json build\\",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build && cp public/manifest.json build/",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
