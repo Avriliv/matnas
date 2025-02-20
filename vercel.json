@@ -1,6 +1,6 @@
 {
-  "buildCommand": "GENERATE_SOURCEMAP=false react-scripts build",
-  "outputDirectory": "build",
+  "buildCommand": "cd client && react-scripts build",
+  "outputDirectory": "client/build",
   "headers": [
     {
       "source": "/(.*)",
