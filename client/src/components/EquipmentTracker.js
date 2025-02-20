@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -61,19 +61,7 @@ function EquipmentTracker() {
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const signatureRef = useRef();
 
-  useEffect(() => {
-    fetchEquipment();
-  }, []);
-
-  const showAlert = (message, severity = 'success') => {
-    setAlert({ open: true, message, severity });
-  };
-
-  const handleCloseAlert = () => {
-    setAlert({ ...alert, open: false });
-  };
-
-  const fetchEquipment = async () => {
+  const fetchEquipment = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('equipment_tracking')
@@ -81,14 +69,26 @@ function EquipmentTracker() {
         .order('checkout_date', { ascending: false });
 
       if (error) {
-        showAlert('שגיאה בטעינת הציוד', 'error');
+        setAlert({ open: true, message: 'שגיאה בטעינת הציוד', severity: 'error' });
         throw error;
       }
       setEquipment(data || []);
     } catch (error) {
       console.error('Error fetching equipment:', error);
-      showAlert('שגיאה בטעינת הציוד', 'error');
+      setAlert({ open: true, message: 'שגיאה בטעינת הציוד', severity: 'error' });
     }
+  }, []);
+
+  useEffect(() => {
+    fetchEquipment();
+  }, [fetchEquipment]);
+
+  const showAlert = (message, severity = 'success') => {
+    setAlert({ open: true, message, severity });
+  };
+
+  const handleCloseAlert = () => {
+    setAlert({ ...alert, open: false });
   };
 
   const validateForm = () => {
@@ -105,7 +105,7 @@ function EquipmentTracker() {
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      showAlert('נא למלא את כל השדות החובה', 'error');
+      setAlert({ open: true, message: 'נא למלא את כל השדות החובה', severity: 'error' });
       return;
     }
 
@@ -155,16 +155,16 @@ function EquipmentTracker() {
 
       if (error) {
         console.error('Supabase error:', error);
-        showAlert('שגיאה בשמירת הפריט: ' + error.message, 'error');
+        setAlert({ open: true, message: 'שגיאה בשמירת הפריט: ' + error.message, severity: 'error' });
         throw error;
       }
 
-      showAlert(newItem.id ? 'הפריט עודכן בהצלחה' : 'הפריט נוסף בהצלחה', 'success');
+      setAlert({ open: true, message: newItem.id ? 'הפריט עודכן בהצלחה' : 'הפריט נוסף בהצלחה', severity: 'success' });
       handleCloseDialog();
       fetchEquipment();
     } catch (error) {
       console.error('Error saving equipment:', error);
-      showAlert('שגיאה בשמירת הפריט: ' + (error.message || error), 'error');
+      setAlert({ open: true, message: 'שגיאה בשמירת הפריט: ' + (error.message || error), severity: 'error' });
     }
   };
 
@@ -211,7 +211,7 @@ function EquipmentTracker() {
       fetchEquipment();
     } catch (error) {
       console.error('Error deleting equipment:', error);
-      showAlert('שגיאה במחיקת הפריט', 'error');
+      setAlert({ open: true, message: 'שגיאה במחיקת הפריט', severity: 'error' });
     }
   };
 
