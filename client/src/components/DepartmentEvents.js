@@ -330,11 +330,13 @@ function DepartmentEvents() {
                         </Box>
                       }
                       secondary={
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
+                        <Box component="div">
+                          <Box component="div" sx={{ color: 'text.secondary' }}>
                             {formatDateRange(event.start_date, event.end_date)}
-                          </Typography>
-                          <Typography variant="body2">{event.description}</Typography>
+                          </Box>
+                          <Box component="div">
+                            {event.description}
+                          </Box>
                         </Box>
                       }
                     />
