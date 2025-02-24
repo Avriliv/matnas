@@ -51,7 +51,8 @@ function InventoryList() {
     price: '',
     notes: '',
     include_vat: true,
-    product_url: ''
+    product_url: '',
+    quote_file_url: null
   });
 
   useEffect(() => {
@@ -78,19 +79,25 @@ function InventoryList() {
     };
   }, []);
 
-  async function fetchInventory() {
+  const fetchInventory = async () => {
     try {
       const { data, error } = await supabase
         .from('inventory')
         .select('*')
-        .order('item_name');
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching inventory:', error);
+        showAlert('שגיאה בטעינת המלאי', 'error');
+        return;
+      }
+
       setInventory(data || []);
     } catch (error) {
-      showAlert('שגיאה בטעינת נתוני המלאי', 'error');
+      console.error('Error:', error);
+      showAlert('שגיאה בטעינת המלאי', 'error');
     }
-  }
+  };
 
   const showAlert = (message, severity = 'success') => {
     setAlert({ open: true, message, severity });
@@ -105,8 +112,9 @@ function InventoryList() {
         supplier: item.supplier || '',
         price: item.price?.toString() || '',
         notes: item.notes || '',
-        include_vat: item.include_vat ?? true,
-        product_url: item.product_url || ''
+        include_vat: item.include_vat || true,
+        product_url: item.product_url || '',
+        quote_file_url: item.quote_file_url || null
       });
     } else {
       setSelectedItem(null);
@@ -117,7 +125,8 @@ function InventoryList() {
         price: '',
         notes: '',
         include_vat: true,
-        product_url: ''
+        product_url: '',
+        quote_file_url: null
       });
     }
     setOpenDialog(true);
@@ -136,36 +145,41 @@ function InventoryList() {
 
   const handleSaveItem = async () => {
     try {
-      const itemData = {
-        item_name: newItem.item_name,
-        quantity: parseInt(newItem.quantity) || 0,
-        supplier: newItem.supplier,
-        price: parseFloat(newItem.price) || null,
-        notes: newItem.notes,
-        include_vat: newItem.include_vat,
-        product_url: newItem.product_url
-      };
-
-      if (selectedItem) {
-        const { error } = await supabase
-          .from('inventory')
-          .update(itemData)
-          .eq('id', selectedItem.id);
-
-        if (error) throw error;
-        showAlert('פריט עודכן בהצלחה');
-      } else {
-        const { error } = await supabase
-          .from('inventory')
-          .insert([itemData]);
-
-        if (error) throw error;
-        showAlert('פריט נוסף בהצלחה');
+      if (!newItem.item_name.trim()) {
+        showAlert('נא למלא את שם הפריט', 'error');
+        return;
       }
 
+      const itemData = {
+        item_name: newItem.item_name.trim(),
+        quantity: newItem.quantity ? parseInt(newItem.quantity) : 0,
+        supplier: newItem.supplier || null,
+        price: newItem.price ? parseFloat(newItem.price) : null,
+        notes: newItem.notes || null,
+        include_vat: newItem.include_vat === undefined ? true : newItem.include_vat,
+        product_url: newItem.product_url || null,
+        quote_file_url: newItem.quote_file_url || null
+      };
+
+      if (selectedItem?.id) {
+        itemData.id = selectedItem.id;
+      }
+
+      const { error } = await supabase
+        .from('inventory')
+        .upsert([itemData]);
+
+      if (error) {
+        console.error('Error saving item:', error);
+        showAlert(error.message || 'שגיאה בשמירת הפריט', 'error');
+        return;
+      }
+
+      showAlert(selectedItem ? 'פריט עודכן בהצלחה' : 'פריט נוסף בהצלחה');
       fetchInventory();
       handleCloseDialog();
     } catch (error) {
+      console.error('Error:', error);
       showAlert('שגיאה בשמירת הפריט', 'error');
     }
   };
@@ -183,6 +197,7 @@ function InventoryList() {
         showAlert('הפריט נמחק בהצלחה');
         fetchInventory();
       } catch (error) {
+        console.error('Error deleting item:', error);
         showAlert('שגיאה במחיקת הפריט', 'error');
       }
     }
@@ -202,7 +217,6 @@ function InventoryList() {
       'כמות': item.quantity,
       'ספק': item.supplier || '',
       'מחיר': item.price ? calculatePriceWithVat(item.price, item.include_vat) : '',
-      'כולל מע"מ': item.include_vat ? 'כן' : 'לא',
       'קישור למוצר': item.product_url || '',
       'הערות': item.notes || ''
     }));
@@ -232,6 +246,7 @@ function InventoryList() {
       const file = event.target.files[0];
       if (!file) return;
 
+      // העלאת הקובץ ל-Storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `quotes/${fileName}`;
@@ -242,18 +257,15 @@ function InventoryList() {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl }, error: urlError } = await supabase.storage
+      // קבלת URL לקובץ
+      const { data: { publicUrl } } = await supabase.storage
         .from('inventory-quotes')
         .getPublicUrl(filePath);
 
-      if (urlError) throw urlError;
-
+      // עדכון הרשומה בטבלה
       const { error: updateError } = await supabase
         .from('inventory')
-        .update({
-          quote_file_url: publicUrl,
-          quote_file_name: file.name
-        })
+        .update({ quote_file_url: publicUrl })
         .eq('id', itemId);
 
       if (updateError) throw updateError;
@@ -261,6 +273,7 @@ function InventoryList() {
       showAlert('הצעת המחיר הועלתה בהצלחה');
       fetchInventory();
     } catch (error) {
+      console.error('Error uploading file:', error);
       showAlert('שגיאה בהעלאת הקובץ', 'error');
     }
   };
@@ -298,7 +311,7 @@ function InventoryList() {
                 <TableCell>כמות</TableCell>
                 <TableCell>ספק</TableCell>
                 <TableCell>מחיר</TableCell>
-                <TableCell>כולל מע״מ</TableCell>
+                <TableCell>כולל מע"מ</TableCell>
                 <TableCell>הצעת מחיר</TableCell>
                 <TableCell>קישור למוצר</TableCell>
                 <TableCell>הערות</TableCell>
@@ -319,46 +332,40 @@ function InventoryList() {
                         צפה בהצעת מחיר
                       </Link>
                     ) : (
-                      <input
-                        type="file"
-                        onChange={(e) => handleFileUpload(e, item.id)}
-                        style={{ display: 'none' }}
-                        id={`quote-upload-${item.id}`}
-                      />
+                      <>
+                        <input
+                          type="file"
+                          onChange={(e) => handleFileUpload(e, item.id)}
+                          style={{ display: 'none' }}
+                          id={`quote-upload-${item.id}`}
+                        />
+                        <label htmlFor={`quote-upload-${item.id}`}>
+                          <Button component="span" size="small">
+                            העלה
+                          </Button>
+                        </label>
+                      </>
                     )}
-                    <label htmlFor={`quote-upload-${item.id}`}>
-                      <Button component="span" size="small">
-                        {item.quote_file_url ? 'החלף' : 'העלה'}
-                      </Button>
-                    </label>
                   </TableCell>
                   <TableCell>
                     {item.product_url && (
                       <Link href={item.product_url} target="_blank" rel="noopener noreferrer">
-                        קישור למוצר
+                        קישור
                       </Link>
                     )}
                   </TableCell>
-                  <TableCell>{item.notes}</TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={1}>
-                      <Tooltip title="ערוך">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDialog(item)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="מחק">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteItem(item.id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
+                    <Typography variant="body2" component="span">
+                      {item.notes}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleOpenDialog(item)} size="small">
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDeleteItem(item.id)} size="small">
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -412,29 +419,29 @@ function InventoryList() {
                 fullWidth
               />
 
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
-                  label="מחיר"
-                  value={newItem.price}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9.]/g, '');
-                    setNewItem({ ...newItem, price: value });
-                  }}
-                  type="text"
-                  fullWidth
-                />
-                <FormControl fullWidth>
-                  <InputLabel>מע״מ</InputLabel>
-                  <Select
-                    value={newItem.include_vat}
-                    label="מע״מ"
-                    onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
-                  >
-                    <MenuItem value={true}>כולל מע״מ</MenuItem>
-                    <MenuItem value={false}>לא כולל מע״מ</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
+              <TextField
+                label="מחיר"
+                value={newItem.price}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setNewItem({ ...newItem, price: value });
+                }}
+                type="text"
+                fullWidth
+              />
+
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="include-vat-label">מחיר כולל מע&quot;מ</InputLabel>
+                <Select
+                  labelId="include-vat-label"
+                  label="מחיר כולל מע&quot;מ"
+                  value={newItem.include_vat}
+                  onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
+                >
+                  <MenuItem value={true}>כולל מע&quot;מ</MenuItem>
+                  <MenuItem value={false}>לא כולל מע&quot;מ</MenuItem>
+                </Select>
+              </FormControl>
 
               <TextField
                 label="קישור למוצר"
