@@ -33,6 +33,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EventIcon from '@mui/icons-material/Event';
 import PersonIcon from '@mui/icons-material/Person';
 import { supabase } from '../supabaseClient';
+import ExportButtons from './ExportButtons';
 
 const TASK_STATUS = {
   TODO: 'לביצוע',
@@ -67,6 +68,8 @@ const TaskList = () => {
   });
   const [newSubtask, setNewSubtask] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
 
   useEffect(() => {
     fetchTasks();
@@ -162,20 +165,28 @@ const TaskList = () => {
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('האם למחוק את המשימה?')) return;
+  const handleDeleteClick = (taskId) => {
+    setTaskToDelete(taskId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!taskToDelete) return;
 
     try {
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', taskId);
+        .eq('id', taskToDelete);
 
       if (error) throw error;
-      fetchTasks();
+
+      setTasks(tasks.filter(task => task.id !== taskToDelete));
     } catch (error) {
-      console.error('שגיאה במחיקת משימה:', error);
-      alert('שגיאה במחיקת המשימה');
+      console.error('Error deleting task:', error);
+    } finally {
+      setDeleteConfirmOpen(false);
+      setTaskToDelete(null);
     }
   };
 
@@ -227,21 +238,47 @@ const TaskList = () => {
     return tasks.filter(task => task.status === status);
   };
 
+  // הגדרת העמודות לייצוא
+  const exportColumns = [
+    { field: 'title', headerName: 'כותרת' },
+    { field: 'description', headerName: 'תיאור' },
+    { field: 'type', headerName: 'סוג' },
+    { field: 'status', headerName: 'סטטוס' },
+    { field: 'owner', headerName: 'אחראי' },
+    { field: 'due_date', headerName: 'תאריך יעד' },
+    { field: 'subtasks', headerName: 'תתי משימות' }
+  ];
+
+  // עיבוד הנתונים לייצוא
+  const exportData = tasks.map(task => ({
+    ...task,
+    subtasks: task.subtasks || []
+  }));
+
   return (
     <Box sx={{ p: 2 }}>
-      <Button
-        variant="contained"
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={() => {
-          setSelectedTask(null);
-          setNewTask({ title: '', description: '', status: 'TODO', type: 'משימה', customType: '', date: null, subtasks: [], owner: '' });
-          setOpenDialog(true);
-        }}
-        sx={{ mb: 3 }}
-      >
-        משימה חדשה
-      </Button>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5">משימות ואירועים</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setSelectedTask(null);
+              setNewTask({ title: '', description: '', status: 'TODO', type: 'משימה', customType: '', date: null, subtasks: [], owner: '' });
+              setOpenDialog(true);
+            }}
+            sx={{ mb: 3 }}
+          >
+            משימה חדשה
+          </Button>
+          <ExportButtons
+            data={exportData}
+            filename="רשימת_משימות"
+            columns={exportColumns}
+          />
+        </Box>
+      </Box>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <Grid container spacing={2}>
@@ -314,7 +351,7 @@ const TaskList = () => {
                                         size="small"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleDeleteTask(task.id);
+                                          handleDeleteClick(task.id);
                                         }}
                                         sx={{ color: 'error.main' }}
                                       >
@@ -688,6 +725,33 @@ const TaskList = () => {
           <Button onClick={() => setOpenDialog(false)}>ביטול</Button>
           <Button onClick={handleSaveTask} variant="contained" color="primary">
             {selectedTask ? 'שמור שינויים' : 'צור משימה'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג אישור מחיקה */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        dir="rtl"
+      >
+        <DialogTitle sx={{ textAlign: 'center' }}>
+          האם למחוק את המשימה?
+        </DialogTitle>
+        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+          >
+            כן, למחוק
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteConfirmOpen(false)}
+          >
+            ביטול
           </Button>
         </DialogActions>
       </Dialog>

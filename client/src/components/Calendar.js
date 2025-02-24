@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import heLocale from '@fullcalendar/core/locales/he';
 import {
   Box,
   Paper,
-  Grid,
   Typography,
   Button,
   Dialog,
@@ -12,19 +15,15 @@ import {
   DialogActions,
   TextField,
   Stack,
+  IconButton,
   Alert,
   Snackbar,
-  MenuItem,
-  IconButton,
-  Card,
-  CardContent,
-  Chip
+  MenuItem
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
-  Event as EventIcon
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 
 const eventTypes = [
@@ -159,40 +158,6 @@ function Calendar() {
         showAlert('שגיאה במחיקת האירוע', 'error');
       }
     }
-  };
-
-  const getMonthEvents = () => {
-    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-
-    const monthEvents = events.filter(event => {
-      const eventDate = new Date(event.start_date);
-      return eventDate >= start && eventDate <= end;
-    });
-
-    const monthEducationDates = educationDates.filter(date => {
-      const startDate = new Date(date.start_date);
-      return startDate >= start && startDate <= end;
-    });
-
-    return [...monthEvents, ...monthEducationDates].sort((a, b) => 
-      new Date(a.start_date) - new Date(b.start_date)
-    );
-  };
-
-  const formatDateRange = (startDate, endDate) => {
-    const start = new Date(startDate).toLocaleDateString('he-IL');
-    if (!endDate) return start;
-    const end = new Date(endDate).toLocaleDateString('he-IL');
-    return `${start} - ${end}`;
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
-  };
-
-  const previousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
   };
 
   const handleBulkImport = async () => {
@@ -496,20 +461,27 @@ function Calendar() {
   };
 
   return (
-    <Box>
-      <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5">לוח אירועים</Typography>
+    <Box sx={{ p: 2, height: '90vh' }}>
+      <Paper elevation={3} sx={{ 
+        p: 3, 
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h4" component="h1">לוח אירועים</Typography>
           <Stack direction="row" spacing={2}>
             <Button
               variant="outlined"
               onClick={handleImportEducationDates}
+              size="large"
             >
               ייבוא חופשות משרד החינוך
             </Button>
             <Button
               variant="outlined"
               onClick={handleBulkImport}
+              size="large"
             >
               ייבוא אירועי המחלקה
             </Button>
@@ -517,68 +489,43 @@ function Calendar() {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() => handleOpenDialog()}
+              size="large"
             >
               הוסף אירוע
             </Button>
           </Stack>
         </Box>
 
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 2 }}>
-          <IconButton onClick={previousMonth}>
-            <EventIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ mx: 2 }}>
-            {currentMonth.toLocaleString('he-IL', { month: 'long', year: 'numeric' })}
-          </Typography>
-          <IconButton onClick={nextMonth}>
-            <EventIcon />
-          </IconButton>
+        <Box sx={{ flexGrow: 1, '& .fc': { height: '100%' } }}>
+          <FullCalendar
+            plugins={[dayGridPlugin, interactionPlugin]}
+            initialView="dayGridMonth"
+            locale={heLocale}
+            direction="rtl"
+            headerToolbar={{
+              start: 'today prev,next',
+              center: 'title',
+              end: ''
+            }}
+            events={events.map(event => ({
+              title: event.title,
+              start: event.start_date,
+              end: event.end_date,
+              backgroundColor: event.type === 'חופשה' ? '#4caf50' : '#1976d2'
+            }))}
+            height="100%"
+            dayMaxEvents={4}
+            eventDisplay="block"
+            displayEventTime={false}
+            eventClick={(info) => {
+              const event = events.find(e => 
+                e.title === info.event.title && 
+                e.start_date === info.event.startStr
+              );
+              if (event) handleOpenDialog(event);
+            }}
+          />
         </Box>
-
-        <Grid container spacing={2}>
-          {getMonthEvents().map((event) => (
-            <Grid item xs={12} key={event.id}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box>
-                      <Typography variant="h6">{event.title}</Typography>
-                      <Chip 
-                        label={event.type} 
-                        size="small" 
-                        sx={{ mb: 1 }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        {formatDateRange(event.start_date, event.end_date)}
-                      </Typography>
-                      {event.description && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          {event.description}
-                        </Typography>
-                      )}
-                    </Box>
-                    {'type' in event && (
-                      <Box>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDialog(event)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteEvent(event.id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    )}
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
       </Paper>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>

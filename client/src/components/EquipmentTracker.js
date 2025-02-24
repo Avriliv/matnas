@@ -10,7 +10,6 @@ import {
   Paper,
   Typography,
   IconButton,
-  ButtonGroup,
   Menu,
   MenuItem,
   Stack,
@@ -24,21 +23,18 @@ import {
   TableRow,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import ShareIcon from '@mui/icons-material/Share';
-import GetAppIcon from '@mui/icons-material/GetApp';
 import SignaturePad from 'react-signature-canvas';
 import { supabase } from '../supabaseClient';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
+import ExportButtons from './ExportButtons';
 
 // הגדרת פונט עברי
 
@@ -47,7 +43,6 @@ const staffMembers = ['אברי', 'בעז'];
 function EquipmentTracker() {
   const [equipment, setEquipment] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [shareAnchorEl, setShareAnchorEl] = useState(null);
   const [newItem, setNewItem] = useState({
     item_name: '',
     quantity: 1,
@@ -60,6 +55,9 @@ function EquipmentTracker() {
   const [errors, setErrors] = useState({});
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const signatureRef = useRef();
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -200,137 +198,187 @@ function EquipmentTracker() {
     }
   };
 
-  const handleDeleteItem = async (id) => {
+  const handleDeleteClick = (itemId) => {
+    setItemToDelete(itemId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+
     try {
       const { error } = await supabase
         .from('equipment_tracking')
         .delete()
-        .eq('id', id);
+        .eq('id', itemToDelete);
 
       if (error) throw error;
-      fetchEquipment();
+
+      setEquipment(equipment.filter(item => item.id !== itemToDelete));
+      setAlert({
+        open: true,
+        message: 'הפריט נמחק בהצלחה',
+        severity: 'success'
+      });
     } catch (error) {
-      console.error('Error deleting equipment:', error);
-      setAlert({ open: true, message: 'שגיאה במחיקת הפריט', severity: 'error' });
+      console.error('Error deleting item:', error);
+      setAlert({
+        open: true,
+        message: 'שגיאה במחיקת הפריט',
+        severity: 'error'
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setItemToDelete(null);
     }
   };
 
-  const exportToCSV = () => {
-    // הכנת כותרות העמודות
-    const headers = ['שם הפריט', 'כמות', 'תאריך משיכה', 'איש צוות', 'שם השואל', 'הערות'];
-    
-    // הכנת שורות הנתונים
-    const rows = equipment.map(item => [
-      item.item_name,
-      item.quantity || '1',
-      new Date(item.checkout_date).toLocaleDateString('he-IL'),
-      item.staff_member,
-      item.borrower_name,
-      item.notes || ''
-    ]);
+  const handleReturn = async (item) => {
+    try {
+      const { data, error } = await supabase
+        .from('equipment_tracking')
+        .update({
+          return_date: new Date().toISOString().split('T')[0],
+          borrower_name: '',
+          staff_member: ''
+        })
+        .eq('id', item.id);
 
-    // יצירת תוכן ה-CSV
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+      if (error) throw error;
 
-    // יצירת ה-Blob עם BOM כדי שהעברית תוצג נכון
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { 
-      type: 'text/csv;charset=utf-8' 
-    });
+      // עדכון הממשק
+      setEquipment(equipment.map(eq => 
+        eq.id === item.id 
+          ? { 
+              ...eq, 
+              return_date: new Date().toISOString().split('T')[0],
+              borrower_name: '',
+              staff_member: ''
+            }
+          : eq
+      ));
 
-    // הורדת הקובץ
-    saveAs(blob, 'מעקב_ציוד.csv');
+      setAlert({ open: true, message: 'הפריט הוחזר בהצלחה', severity: 'success' });
+    } catch (error) {
+      console.error('Error returning item:', error);
+      setAlert({ open: true, message: 'שגיאה בהחזרת הפריט', severity: 'error' });
+    }
   };
 
-  const shareViaWhatsApp = () => {
-    const text = encodeURIComponent(`מעקב ציוד:\n\n${equipment.map(item => 
-      `שם הפריט: ${item.item_name}\nכמות: ${item.quantity || 1}\nתאריך משיכה: ${new Date(item.checkout_date).toLocaleDateString('he-IL')}\nאיש צוות: ${item.staff_member}\nשם השואל: ${item.borrower_name}\n${item.notes ? `הערות: ${item.notes}\n` : ''}\n`
-    ).join('\n')}`);
-    window.open(`https://wa.me/?text=${text}`);
-    setShareAnchorEl(null);
+  // הגדרת העמודות לייצוא
+  const exportColumns = [
+    { field: 'item_name', headerName: 'שם הפריט' },
+    { field: 'borrower_name', headerName: 'שואל' },
+    { field: 'checkout_date', headerName: 'תאריך השאלה' },
+    { field: 'staff_member', headerName: 'אחראי' },
+    { field: 'notes', headerName: 'הערות' }
+  ];
+
+  // עיבוד הנתונים לייצוא
+  const formatDate = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleDateString('he-IL');
   };
 
-  const shareViaEmail = () => {
-    const subject = encodeURIComponent('מעקב ציוד');
-    const body = encodeURIComponent(`מעקב ציוד:\n\n${equipment.map(item => 
-      `שם הפריט: ${item.item_name}\nכמות: ${item.quantity || 1}\nתאריך משיכה: ${new Date(item.checkout_date).toLocaleDateString('he-IL')}\nאיש צוות: ${item.staff_member}\nשם השואל: ${item.borrower_name}\n${item.notes ? `הערות: ${item.notes}\n` : ''}\n`
-    ).join('\n')}`);
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-    setShareAnchorEl(null);
+  const exportData = equipment.map(item => ({
+    ...item,
+    checkout_date: formatDate(item.checkout_date),
+    return_date: formatDate(item.return_date)
+  }));
+
+  // פילטור הציוד לפי טאב
+  const borrowedEquipment = equipment.filter(item => !item.return_date);
+  const returnedEquipment = equipment.filter(item => item.return_date);
+
+  const handleTabChange = (event, newValue) => {
+    setSelectedTab(newValue);
   };
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Typography variant="h6">מעקב ציוד</Typography>
-          <ButtonGroup variant="contained" size="small">
-            <Button startIcon={<GetAppIcon />} onClick={exportToCSV}>
-              ייצא לקובץ
-            </Button>
-            <Button
-              startIcon={<ShareIcon />}
-              onClick={(e) => setShareAnchorEl(e.currentTarget)}
-            >
-              שתף
-            </Button>
-          </ButtonGroup>
+    <Box sx={{ p: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5">מעקב ציוד</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setNewItem({
+                item_name: '',
+                quantity: 1,
+                checkout_date: new Date().toISOString().split('T')[0],
+                staff_member: '',
+                borrower_name: '',
+                notes: '',
+                signature: null
+              });
+              setOpenDialog(true);
+            }}
+          >
+            הוסף פריט חדש
+          </Button>
+          <ExportButtons
+            data={exportData}
+            filename="מעקב_ציוד"
+            columns={exportColumns}
+          />
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleOpenDialog}
-        >
-          הוסף פריט חדש
-        </Button>
       </Box>
 
-      <Menu
-        anchorEl={shareAnchorEl}
-        open={Boolean(shareAnchorEl)}
-        onClose={() => setShareAnchorEl(null)}
-      >
-        <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
-        <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
-      </Menu>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+        <Tabs value={selectedTab} onChange={handleTabChange} dir="rtl">
+          <Tab label="פריטים מושאלים" />
+          <Tab label="פריטים שהוחזרו" />
+        </Tabs>
+      </Box>
 
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>שם הפריט</TableCell>
-              <TableCell>כמות</TableCell>
-              <TableCell>תאריך משיכה</TableCell>
-              <TableCell>איש צוות</TableCell>
               <TableCell>שם השואל</TableCell>
+              <TableCell>תאריך משיכה</TableCell>
+              <TableCell>תאריך החזרה</TableCell>
+              <TableCell>איש צוות</TableCell>
               <TableCell>הערות</TableCell>
-              <TableCell>חתימה</TableCell>
               <TableCell>פעולות</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {equipment.map((item) => (
+            {(selectedTab === 0 ? borrowedEquipment : returnedEquipment).map((item) => (
               <TableRow key={item.id}>
                 <TableCell>{item.item_name}</TableCell>
-                <TableCell>{item.quantity || 1}</TableCell>
-                <TableCell>{new Date(item.checkout_date).toLocaleDateString('he-IL')}</TableCell>
-                <TableCell>{item.staff_member}</TableCell>
                 <TableCell>{item.borrower_name}</TableCell>
+                <TableCell>{formatDate(item.checkout_date)}</TableCell>
+                <TableCell>{formatDate(item.return_date)}</TableCell>
+                <TableCell>{item.staff_member}</TableCell>
                 <TableCell>{item.notes}</TableCell>
                 <TableCell>
-                  {item.signature && (
-                    <img src={item.signature} alt="חתימה" style={{ maxWidth: 100, maxHeight: 50 }} />
-                  )}
-                </TableCell>
-                <TableCell>
-                  <IconButton onClick={() => handleEditItem(item)} size="small">
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton onClick={() => handleDeleteItem(item.id)} size="small">
-                    <DeleteIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEditItem(item)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteClick(item.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                    {selectedTab === 0 && (
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        onClick={() => handleReturn(item)}
+                      >
+                        הוחזר
+                      </Button>
+                    )}
+                  </Box>
                 </TableCell>
               </TableRow>
             ))}
@@ -419,6 +467,33 @@ function EquipmentTracker() {
           <Button onClick={handleCloseDialog}>ביטול</Button>
           <Button onClick={handleSubmit} variant="contained">
             {newItem.id ? 'עדכן' : 'שמור'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג אישור מחיקה */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        dir="rtl"
+      >
+        <DialogTitle sx={{ textAlign: 'center' }}>
+          האם למחוק את הפריט?
+        </DialogTitle>
+        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+          >
+            כן, למחוק
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteConfirmOpen(false)}
+          >
+            ביטול
           </Button>
         </DialogActions>
       </Dialog>

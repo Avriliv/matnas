@@ -1,9 +1,8 @@
 import React from 'react';
-import { Button, ButtonGroup, Menu, MenuItem } from '@mui/material';
-import ShareIcon from '@mui/icons-material/Share';
+import { Button, ButtonGroup, Menu, MenuItem, Table, TableHead, TableBody, TableRow, TableCell, Paper } from '@mui/material';
 import GetAppIcon from '@mui/icons-material/GetApp';
+import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -18,67 +17,138 @@ const ExportButtons = ({ data, filename, columns }) => {
     setAnchorEl(null);
   };
 
-  const exportToPDF = () => {
-    // יצירת מסמך PDF עם תמיכה בעברית
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-      putOnlyUsedFonts: true,
-      direction: 'rtl'
-    });
-
-    // הוספת פונט עברי
-    doc.addFont('https://fonts.gstatic.com/s/heebo/v21/NGSpv5_NC0k9P_v6ZUCbLRAHxK1EiSysdUmj.ttf', 'Heebo', 'normal');
-    doc.setFont('Heebo');
-    doc.setFontSize(14);
+  // פונקציה להמרת ערכים לפורמט המתאים
+  const formatValue = (value, field) => {
+    if (!value) return '';
     
-    // כותרת בעברית
-    const title = filename;
-    const titleWidth = doc.getStringUnitWidth(title) * doc.getFontSize();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const titleX = (pageWidth - titleWidth) / 2;
-    doc.text(title, titleX, 20);
-
-    // הכנת נתונים לטבלה
-    const tableData = data.map(item => 
-      columns.map(col => {
-        const value = item[col.field];
-        return value?.toString() || '';
-      })
-    );
-
-    // יצירת טבלה עם תמיכה בעברית
-    doc.autoTable({
-      head: [columns.map(col => col.headerName)],
-      body: tableData,
-      startY: 30,
-      theme: 'grid',
-      styles: {
-        font: 'Heebo',
-        fontSize: 10,
-        cellPadding: 3,
-        halign: 'right',
-        direction: 'rtl'
-      },
-      headStyles: {
-        fillColor: [66, 139, 202],
-        textColor: [255, 255, 255],
-        halign: 'right'
-      },
-      columnStyles: {
-        0: { halign: 'right' }
-      },
-      didParseCell: function(data) {
-        // הפיכת טקסט בעברית לכיוון הנכון
-        const hebrew = /[\u0590-\u05FF]/.test(data.text);
-        if (hebrew) {
-          data.cell.styles.direction = 'rtl';
-        }
+    // טיפול בתאריכים
+    if (field === 'due_date' || field === 'date') {
+      try {
+        const date = new Date(value);
+        return date.toLocaleDateString('he-IL', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+      } catch (e) {
+        return value;
       }
-    });
+    }
+    
+    // טיפול בסטטוס
+    if (field === 'status') {
+      const statusMap = {
+        'TODO': 'לביצוע',
+        'IN_PROGRESS': 'בתהליך',
+        'DONE': 'הושלם',
+        'pending': 'ממתין',
+        'completed': 'הושלם'
+      };
+      return statusMap[value] || value;
+    }
 
-    doc.save(`${filename}.pdf`);
+    // טיפול במערכים (כמו תתי-משימות)
+    if (Array.isArray(value)) {
+      if (field === 'subtasks') {
+        return value.map((subtask, idx) => 
+          `${idx + 1}. ${subtask.title || subtask}`
+        ).join('\\n');
+      }
+      return value.join(', ');
+    }
+
+    // טיפול בבוליאנים
+    if (typeof value === 'boolean') {
+      return value ? 'כן' : 'לא';
+    }
+
+    return value.toString();
+  };
+
+  const exportToPDF = async () => {
+    // יצירת טבלה זמנית עם הנתונים
+    const tempTable = document.createElement('div');
+    tempTable.style.direction = 'rtl';
+    tempTable.style.fontFamily = 'Heebo, Arial, sans-serif';
+    tempTable.style.padding = '20px';
+    tempTable.innerHTML = `
+      <h2 style="text-align: center; margin-bottom: 20px;">${filename}</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            ${columns.map(col => `
+              <th style="
+                background-color: #428bca;
+                color: white;
+                padding: 12px;
+                text-align: right;
+                border: 1px solid #ddd;
+                font-size: 14px;
+              ">${col.headerName}</th>
+            `).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map(item => `
+            <tr>
+              ${columns.map(col => `
+                <td style="
+                  padding: 8px;
+                  text-align: right;
+                  border: 1px solid #ddd;
+                  font-size: 12px;
+                  white-space: pre-line;
+                ">${formatValue(item[col.field], col.field)}</td>
+              `).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    document.body.appendChild(tempTable);
+
+    try {
+      // יצירת תמונה מהטבלה
+      const canvas = await html2canvas(tempTable, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: tempTable.scrollWidth,
+        windowHeight: tempTable.scrollHeight
+      });
+
+      // יצירת PDF
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = canvas.height * imgWidth / canvas.width;
+      const doc = new jsPDF('p', 'mm', 'a4');
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+      let pageNumber = 1;
+
+      // הוספת התמונה לPDF
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // הוספת עמודים נוספים אם צריך
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        doc.addPage();
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        pageNumber++;
+      }
+
+      doc.save(`${filename}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    } finally {
+      // ניקוי הטבלה הזמנית
+      document.body.removeChild(tempTable);
+    }
+
     handleClose();
   };
 
@@ -86,7 +156,7 @@ const ExportButtons = ({ data, filename, columns }) => {
     const ws = XLSX.utils.json_to_sheet(data.map(item => {
       const row = {};
       columns.forEach(col => {
-        row[col.headerName] = item[col.field];
+        row[col.headerName] = formatValue(item[col.field], col.field);
       });
       return row;
     }));
@@ -96,23 +166,6 @@ const ExportButtons = ({ data, filename, columns }) => {
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const excelFile = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     saveAs(excelFile, `${filename}.xlsx`);
-    handleClose();
-  };
-
-  const shareViaWhatsApp = () => {
-    const text = encodeURIComponent(`${filename}\n\n${data.map(item => 
-      columns.map(col => `${col.headerName}: ${item[col.field]}`).join('\n')
-    ).join('\n\n')}`);
-    window.open(`https://wa.me/?text=${text}`);
-    handleClose();
-  };
-
-  const shareViaEmail = () => {
-    const subject = encodeURIComponent(filename);
-    const body = encodeURIComponent(data.map(item => 
-      columns.map(col => `${col.headerName}: ${item[col.field]}`).join('\n')
-    ).join('\n\n'));
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
     handleClose();
   };
 
@@ -138,8 +191,6 @@ const ExportButtons = ({ data, filename, columns }) => {
         <MenuItem onClick={() => exportToExcel()}>
           ייצא ל-Excel
         </MenuItem>
-        <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
-        <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
       </Menu>
     </div>
   );

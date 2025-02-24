@@ -36,6 +36,7 @@ import {
   Delete as DeleteIcon,
   FileDownload as FileDownloadIcon
 } from '@mui/icons-material';
+import ExportButtons from './ExportButtons';
 
 function InventoryList() {
   const [inventory, setInventory] = useState([]);
@@ -43,6 +44,8 @@ function InventoryList() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const [newItem, setNewItem] = useState({
     item_name: '',
@@ -184,22 +187,38 @@ function InventoryList() {
     }
   };
 
-  const handleDeleteItem = async (id) => {
-    if (window.confirm('האם אתה בטוח שברצונך למחוק פריט זה?')) {
-      try {
-        const { error } = await supabase
-          .from('inventory')
-          .delete()
-          .eq('id', id);
+  const handleDeleteClick = (itemId) => {
+    setItemToDelete(itemId);
+    setDeleteConfirmOpen(true);
+  };
 
-        if (error) throw error;
-        
-        showAlert('הפריט נמחק בהצלחה');
-        fetchInventory();
-      } catch (error) {
-        console.error('Error deleting item:', error);
-        showAlert('שגיאה במחיקת הפריט', 'error');
-      }
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', itemToDelete);
+
+      if (error) throw error;
+
+      setInventory(inventory.filter(item => item.id !== itemToDelete));
+      setAlert({
+        open: true,
+        message: 'הפריט נמחק בהצלחה',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      setAlert({
+        open: true,
+        message: 'שגיאה במחיקת הפריט',
+        severity: 'error'
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setItemToDelete(null);
     }
   };
 
@@ -278,20 +297,39 @@ function InventoryList() {
     }
   };
 
+  // הגדרת העמודות לייצוא
+  const exportColumns = [
+    { field: 'item_name', headerName: 'שם הפריט' },
+    { field: 'quantity', headerName: 'כמות' },
+    { field: 'supplier', headerName: 'ספק' },
+    { field: 'price', headerName: 'מחיר' },
+    { field: 'include_vat', headerName: 'כולל מע"מ' },
+    { field: 'notes', headerName: 'הערות' }
+  ];
+
   return (
-    <Box>
+    <Box sx={{ width: '100%', p: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h2">
+          מלאי והזמנות
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenDialog()}
+        >
+          הוסף פריט
+        </Button>
+        <ExportButtons
+          data={inventory}
+          filename="רשימת_מלאי"
+          columns={exportColumns}
+        />
+      </Stack>
       <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5">מלאי והזמנות</Typography>
+          <Typography variant="h5">רשימת מלאי</Typography>
           <Box>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-              sx={{ ml: 1 }}
-            >
-              הוספת פריט חדש
-            </Button>
             <Button
               variant="outlined"
               startIcon={<FileDownloadIcon />}
@@ -311,7 +349,7 @@ function InventoryList() {
                 <TableCell>כמות</TableCell>
                 <TableCell>ספק</TableCell>
                 <TableCell>מחיר</TableCell>
-                <TableCell>כולל מע"מ</TableCell>
+                <TableCell>כולל מע״מ</TableCell>
                 <TableCell>הצעת מחיר</TableCell>
                 <TableCell>קישור למוצר</TableCell>
                 <TableCell>הערות</TableCell>
@@ -363,7 +401,7 @@ function InventoryList() {
                     <IconButton onClick={() => handleOpenDialog(item)} size="small">
                       <EditIcon />
                     </IconButton>
-                    <IconButton onClick={() => handleDeleteItem(item.id)} size="small">
+                    <IconButton onClick={() => handleDeleteClick(item.id)} size="small">
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
@@ -385,6 +423,32 @@ function InventoryList() {
             שלח במייל
           </MenuItem>
         </Menu>
+
+        <Dialog
+          open={deleteConfirmOpen}
+          onClose={() => setDeleteConfirmOpen(false)}
+          maxWidth="xs"
+          dir="rtl"
+        >
+          <DialogTitle sx={{ textAlign: 'center' }}>
+            האם למחוק את הפריט?
+          </DialogTitle>
+          <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteConfirm}
+            >
+              כן, למחוק
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setDeleteConfirmOpen(false)}
+            >
+              ביטול
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
           <DialogTitle>
@@ -431,15 +495,15 @@ function InventoryList() {
               />
 
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="include-vat-label">מחיר כולל מע&quot;מ</InputLabel>
+                <InputLabel id="include-vat-label">מחיר כולל מע״מ</InputLabel>
                 <Select
                   labelId="include-vat-label"
-                  label="מחיר כולל מע&quot;מ"
+                  label="מחיר כולל מע״מ"
                   value={newItem.include_vat}
                   onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
                 >
-                  <MenuItem value={true}>כולל מע&quot;מ</MenuItem>
-                  <MenuItem value={false}>לא כולל מע&quot;מ</MenuItem>
+                  <MenuItem value={true}>כולל מע״מ</MenuItem>
+                  <MenuItem value={false}>לא כולל מע״מ</MenuItem>
                 </Select>
               </FormControl>
 
