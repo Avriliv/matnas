@@ -28,11 +28,14 @@
     "react-signature-canvas": "^1.1.0-alpha.1",
     "stylis": "^4.3.1",
     "stylis-plugin-rtl": "^2.1.1",
+    "workbox-core": "^7.3.0",
+    "workbox-expiration": "^7.3.0",
+    "workbox-precaching": "^7.3.0",
     "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
