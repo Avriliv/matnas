@@ -1,49 +1,49 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Typography,
-  TextField,
-  Grid,
   IconButton,
+  Grid,
+  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Button,
+  TextField,
   MenuItem,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  Stack,
-  Tooltip,
-  CardActions,
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
-  Collapse,
-  Divider,
+  Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  InputAdornment
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import SortIcon from '@mui/icons-material/Sort';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import AddIcon from '@mui/icons-material/Add';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format } from 'date-fns';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EventIcon from '@mui/icons-material/Event';
+import PersonIcon from '@mui/icons-material/Person';
 import { supabase } from '../supabaseClient';
+
+const TASK_STATUS = {
+  TODO: 'לביצוע',
+  IN_PROGRESS: 'בתהליך',
+  DONE: 'הושלם'
+};
 
 const eventTypes = [
   'משימה',
   'אירוע',
+  'פגישה',
   'טיול מועצתי',
   'טיול ישובי',
   'אירוע מועצתי',
@@ -53,118 +53,48 @@ const eventTypes = [
 
 const TaskList = () => {
   const [tasks, setTasks] = useState([]);
-  const [filteredTasks, setFilteredTasks] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [editTask, setEditTask] = useState(null);
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState('משימה');
-  const [customType, setCustomType] = useState('');
-  const [description, setDescription] = useState('');
-  const [date, setDate] = useState(null);
-  const [status, setStatus] = useState('pending');
-  const [expandedTasks, setExpandedTasks] = useState([]);
-  const [subtaskDialogOpen, setSubtaskDialogOpen] = useState(false);
-  const [currentParentTask, setCurrentParentTask] = useState(null);
-  const [newSubtask, setNewSubtask] = useState({
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [newTask, setNewTask] = useState({
     title: '',
     description: '',
-    status: 'pending'
+    status: 'TODO',
+    type: 'משימה',
+    customType: '',
+    date: null,
+    subtasks: [],
+    owner: ''
   });
-  
-  // פילטרים ומיון
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
-  const [sortOrder, setSortOrder] = useState('asc');
-
-  const fetchTasks = useCallback(async () => {
-    try {
-      console.log('מתחיל לטעון משימות ראשיות...');
-      const { data: mainTasks, error: mainError } = await supabase
-        .from('tasks')
-        .select('*')
-        .is('parent_id', null)
-        .order('created_at', { ascending: false });
-
-      if (mainError) {
-        console.error('שגיאה בטעינת משימות ראשיות:', mainError);
-        throw mainError;
-      }
-
-      console.log('טוען משימות משנה...');
-      const { data: subtasks, error: subtasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .not('parent_id', 'is', null);
-
-      if (subtasksError) {
-        console.error('שגיאה בטעינת משימות משנה:', subtasksError);
-        throw subtasksError;
-      }
-
-      // מיפוי משימות המשנה למשימות הראשיות
-      const tasksWithSubtasks = mainTasks.map(task => ({
-        ...task,
-        subtasks: subtasks.filter(subtask => subtask.parent_id === task.id)
-      }));
-      
-      console.log('משימות נטענו בהצלחה:', tasksWithSubtasks);
-      setTasks(tasksWithSubtasks || []);
-      applyFiltersAndSort(tasksWithSubtasks);
-    } catch (error) {
-      console.error('Error fetching tasks:', error.message || error);
-    }
-  }, []);
-
-  const applyFiltersAndSort = useCallback((taskList = tasks) => {
-    let filtered = [...taskList];
-
-    // הפעלת פילטרים
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(task => task.status === statusFilter);
-    }
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(task => task.type === typeFilter);
-    }
-
-    // מיון
-    filtered.sort((a, b) => {
-      if (sortBy === 'date') {
-        return sortOrder === 'asc' 
-          ? new Date(a.date) - new Date(b.date)
-          : new Date(b.date) - new Date(a.date);
-      } else if (sortBy === 'title') {
-        return sortOrder === 'asc'
-          ? a.title.localeCompare(b.title)
-          : b.title.localeCompare(a.title);
-      }
-      return 0;
-    });
-
-    setFilteredTasks(filtered);
-  }, [statusFilter, typeFilter, sortBy, sortOrder, tasks]);
-
-  useEffect(() => {
-    applyFiltersAndSort();
-  }, [statusFilter, typeFilter, sortBy, sortOrder, tasks, applyFiltersAndSort]);
+  const [newSubtask, setNewSubtask] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState(null);
 
   useEffect(() => {
     fetchTasks();
+  }, []);
 
-    const subscription = supabase
-      .channel('tasks_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
-        console.log('Real-time update:', payload);
-        fetchTasks();
-      })
-      .subscribe();
+  const fetchTasks = async () => {
+    try {
+      console.log('מתחיל לטעון משימות...');
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [fetchTasks]);
+      if (error) throw error;
+      console.log('משימות נטענו בהצלחה:', data);
+      setTasks(data || []);
+    } catch (error) {
+      console.error('שגיאה בטעינת משימות:', error);
+    }
+  };
 
-  const handleStatusChange = async (taskId, newStatus) => {
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+
+    const { source, destination } = result;
+    const taskId = result.draggableId;
+    const newStatus = destination.droppableId;
+
     try {
       const { error } = await supabase
         .from('tasks')
@@ -172,494 +102,595 @@ const TaskList = () => {
         .eq('id', taskId);
 
       if (error) throw error;
-      fetchTasks();
+
+      // עדכון ה-state המקומי
+      const updatedTasks = [...tasks];
+      const taskIndex = updatedTasks.findIndex(t => t.id.toString() === taskId);
+      updatedTasks[taskIndex].status = newStatus;
+      setTasks(updatedTasks);
     } catch (error) {
-      console.error('Error updating task status:', error);
+      console.error('שגיאה בעדכון סטטוס משימה:', error);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!title || !type || !date || !status) {
-      alert('נא למלא את כל השדות החובה');
-      return;
-    }
-    
+  const handleSaveTask = async () => {
     try {
-      if (editTask && editTask.id) {
+      if (!newTask.title.trim()) {
+        alert('נא למלא כותרת למשימה');
+        return;
+      }
+
+      const taskData = {
+        title: newTask.title.trim(),
+        description: newTask.description.trim(),
+        status: newTask.status,
+        type: newTask.type === 'אחר' ? newTask.customType : newTask.type,
+        date: newTask.date ? new Date(newTask.date).toISOString().split('T')[0] : null,
+        subtasks: newTask.subtasks || [],
+        owner: newTask.owner?.trim() || null,
+        created_at: new Date().toISOString()
+      };
+
+      if (selectedTask) {
         const { error } = await supabase
           .from('tasks')
-          .update({
-            title,
-            type,
-            description,
-            date,
-            status
-          })
-          .eq('id', editTask.id);
+          .update(taskData)
+          .eq('id', selectedTask.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('שגיאת עדכון:', error);
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from('tasks')
-          .insert([
-            {
-              title,
-              type,
-              description,
-              date,
-              status
-            }
-          ]);
+          .insert([taskData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('שגיאת הוספה:', error);
+          throw error;
+        }
       }
 
-      setOpen(false);
-      clearForm();
+      setOpenDialog(false);
+      setSelectedTask(null);
+      setNewTask({ title: '', description: '', status: 'TODO', type: 'משימה', customType: '', date: null, subtasks: [], owner: '' });
       fetchTasks();
     } catch (error) {
-      console.error('Error saving task:', error);
-      alert('אירעה שגיאה בשמירת המשימה');
+      console.error('שגיאה בשמירת משימה:', error);
+      alert('שגיאה בשמירת המשימה: ' + error.message);
     }
   };
 
   const handleDeleteTask = async (taskId) => {
-    try {
-      // מחיקת משימות משנה קודם
-      const { error: subtasksError } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('parent_id', taskId);
+    if (!window.confirm('האם למחוק את המשימה?')) return;
 
-      if (subtasksError) throw subtasksError;
-
-      // מחיקת המשימה הראשית
-      const { error: mainTaskError } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', taskId);
-
-      if (mainTaskError) throw mainTaskError;
-
-      fetchTasks();
-    } catch (error) {
-      console.error('Error deleting task:', error);
-      alert('שגיאה במחיקת המשימה');
-    }
-  };
-
-  const handleDeleteSubtask = async (subtaskId) => {
     try {
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', subtaskId);
+        .eq('id', taskId);
 
       if (error) throw error;
       fetchTasks();
     } catch (error) {
-      console.error('Error deleting subtask:', error);
-      alert('שגיאה במחיקת משימת המשנה');
+      console.error('שגיאה במחיקת משימה:', error);
+      alert('שגיאה במחיקת המשימה');
     }
   };
 
-  const handleEdit = (task) => {
-    setEditTask(task);
-    setTitle(task.title);
-    setType(task.type);
-    setDescription(task.description || '');
-    setDate(task.date);
-    setStatus(task.status || 'pending');
-    setOpen(true);
-  };
-
-  const clearForm = () => {
-    setEditTask(null);
-    setTitle('');
-    setType('משימה');
-    setDescription('');
-    setDate(null);
-    setStatus('pending');
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-    clearForm();
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'in_progress':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
-
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'משימה':
-        return 'primary';
-      case 'אירוע':
-        return 'secondary';
-      case 'תזכורת':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const handleSubtaskSubmit = async (e) => {
-    e.preventDefault();
-    if (!newSubtask.title) {
-      alert('נא להזין כותרת למשימת המשנה');
-      return;
-    }
-
+  const handleToggleSubtask = async (taskId, subtaskIndex) => {
     try {
-      const { data, error } = await supabase
+      const updatedTasks = [...tasks];
+      const taskIndex = updatedTasks.findIndex(t => t.id.toString() === taskId);
+      updatedTasks[taskIndex].subtasks[subtaskIndex].completed = !updatedTasks[taskIndex].subtasks[subtaskIndex].completed;
+
+      const { error } = await supabase
         .from('tasks')
-        .insert([
-          {
-            title: newSubtask.title,
-            description: newSubtask.description,
-            status: newSubtask.status,
-            parent_id: currentParentTask.id,
-            type: 'subtask'
-          }
-        ]);
+        .update({ subtasks: updatedTasks[taskIndex].subtasks })
+        .eq('id', taskId);
 
       if (error) throw error;
 
-      setSubtaskDialogOpen(false);
-      setNewSubtask({ title: '', description: '', status: 'pending' });
-      fetchTasks();
+      setTasks(updatedTasks);
     } catch (error) {
-      console.error('Error adding subtask:', error);
-      alert('שגיאה בהוספת משימת משנה');
+      console.error('שגיאה בעדכון תת משימה:', error);
     }
   };
 
-  const renderSubtasks = (task) => {
-    if (!task.subtasks || task.subtasks.length === 0) return null;
+  const handleAddSubtask = async (taskId, subtaskTitle) => {
+    try {
+      const taskToUpdate = tasks.find(t => t.id === taskId);
+      if (!taskToUpdate) return;
 
-    return (
-      <Collapse in={expandedTasks.includes(task.id)}>
-        <List sx={{ pl: 4 }}>
-          {task.subtasks.map((subtask) => (
-            <ListItem
-              key={subtask.id}
-              sx={{
-                borderLeft: '1px solid #ccc',
-                mb: 1,
-                backgroundColor: '#f5f5f5',
-                borderRadius: '4px'
-              }}
-            >
-              <ListItemText
-                primary={
-                  <Typography variant="body1" component="div">
-                    {subtask.title}
-                  </Typography>
-                }
-                secondary={
-                  <Box component="div">
-                    <Typography variant="body2" component="div" color="textSecondary" sx={{ mb: 1 }}>
-                      {subtask.description}
-                    </Typography>
-                    <Chip
-                      label={subtask.status === 'completed' ? 'הושלם' : 'בתהליך'}
-                      color={subtask.status === 'completed' ? 'success' : 'warning'}
-                      size="small"
-                    />
-                  </Box>
-                }
-              />
-              <ListItemSecondaryAction>
-                <IconButton
-                  edge="end"
-                  aria-label="delete"
-                  onClick={() => handleDeleteSubtask(subtask.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </ListItemSecondaryAction>
-            </ListItem>
-          ))}
-        </List>
-      </Collapse>
-    );
+      const updatedSubtasks = [...(taskToUpdate.subtasks || []), { title: subtaskTitle, completed: false }];
+      
+      const { error } = await supabase
+        .from('tasks')
+        .update({ subtasks: updatedSubtasks })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      const updatedTasks = tasks.map(task =>
+        task.id === taskId ? { ...task, subtasks: updatedSubtasks } : task
+      );
+      setTasks(updatedTasks);
+      setNewSubtask('');
+      setEditingTaskId(null);
+    } catch (error) {
+      console.error('שגיאה בהוספת תת משימה:', error);
+    }
   };
 
-  const toggleTaskExpansion = (taskId) => {
-    if (expandedTasks.includes(taskId)) {
-      setExpandedTasks(expandedTasks.filter(id => id !== taskId));
-    } else {
-      setExpandedTasks([...expandedTasks, taskId]);
-    }
+  const getTasksByStatus = (status) => {
+    return tasks.filter(task => task.status === status);
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => setOpen(true)}
-        >
-          הוסף משימה חדשה
-        </Button>
-        
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>סטטוס</InputLabel>
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            label="סטטוס"
-            size="small"
-          >
-            <MenuItem value="all">הכל</MenuItem>
-            <MenuItem value="pending">בהמתנה</MenuItem>
-            <MenuItem value="in_progress">בביצוע</MenuItem>
-            <MenuItem value="completed">הושלם</MenuItem>
-          </Select>
-        </FormControl>
+    <Box sx={{ p: 2 }}>
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<AddIcon />}
+        onClick={() => {
+          setSelectedTask(null);
+          setNewTask({ title: '', description: '', status: 'TODO', type: 'משימה', customType: '', date: null, subtasks: [], owner: '' });
+          setOpenDialog(true);
+        }}
+        sx={{ mb: 3 }}
+      >
+        משימה חדשה
+      </Button>
 
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>סוג</InputLabel>
-          <Select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            label="סוג"
-            size="small"
-          >
-            <MenuItem value="all">הכל</MenuItem>
-            <MenuItem value="משימה">משימה</MenuItem>
-            <MenuItem value="אירוע">אירוע</MenuItem>
-            <MenuItem value="תזכורת">תזכורת</MenuItem>
-          </Select>
-        </FormControl>
-
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>מיין לפי</InputLabel>
-          <Select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            label="מיין לפי"
-            size="small"
-          >
-            <MenuItem value="date">תאריך</MenuItem>
-            <MenuItem value="title">כותרת</MenuItem>
-          </Select>
-        </FormControl>
-
-        <Tooltip title={sortOrder === 'asc' ? 'סדר עולה' : 'סדר יורד'}>
-          <IconButton onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
-            <SortIcon sx={{ transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{editTask ? 'ערוך משימה' : 'הוסף משימה חדשה'}</DialogTitle>
-        <DialogContent>
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="כותרת"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  select
-                  label="סוג"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  required
-                >
-                  {eventTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              {type === 'אחר' && (
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="סוג מותאם אישית"
-                    value={customType}
-                    onChange={(e) => setCustomType(e.target.value)}
-                    required
-                  />
-                </Grid>
-              )}
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="תיאור"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  multiline
-                  rows={4}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <LocalizationProvider dateAdapter={AdapterDateFns}>
-                  <DatePicker
-                    label="תאריך"
-                    value={date}
-                    onChange={(newDate) => setDate(newDate)}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
-                </LocalizationProvider>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  select
-                  label="סטטוס"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                >
-                  <MenuItem value="pending">בהמתנה</MenuItem>
-                  <MenuItem value="in_progress">בביצוע</MenuItem>
-                  <MenuItem value="completed">הושלם</MenuItem>
-                </TextField>
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose}>ביטול</Button>
-          <Button onClick={handleSubmit} variant="contained" color="primary">
-            {editTask ? 'שמור שינויים' : 'צור משימה'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={subtaskDialogOpen} onClose={() => setSubtaskDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>הוסף משימת משנה</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="כותרת"
-                  value={newSubtask.title}
-                  onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="תיאור"
-                  value={newSubtask.description}
-                  onChange={(e) => setNewSubtask({ ...newSubtask, description: e.target.value })}
-                  multiline
-                  rows={4}
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSubtaskDialogOpen(false)}>ביטול</Button>
-          <Button onClick={handleSubtaskSubmit} variant="contained" color="primary">
-            הוסף משימת משנה
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Grid container spacing={2}>
-        {filteredTasks.map((task) => (
-          <Grid item xs={12} sm={6} md={4} key={task.id}>
-            <Card sx={{ 
-              height: '100%', 
-              display: 'flex', 
-              flexDirection: 'column',
-              position: 'relative',
-              opacity: task.status === 'completed' ? 0.8 : 1
-            }}>
-              <CardContent sx={{ flexGrow: 1 }}>
-                <Grid container spacing={2} alignItems="center">
-                  <Grid item xs>
-                    <Typography variant="h6" component="div" sx={{ 
-                      textDecoration: task.status === 'completed' ? 'line-through' : 'none'
-                    }}>
-                      {task.title}
-                    </Typography>
-                    <Typography color="text.secondary">{task.description}</Typography>
-                    <Box sx={{ mt: 1 }}>
-                      <Chip 
-                        label={task.type === 'אחר' ? task.customType : task.type} 
-                        size="small"
-                        color={getTypeColor(task.type)}
-                      />
-                      <Chip 
-                        label={
-                          task.status === 'completed' ? 'הושלם' :
-                          task.status === 'in_progress' ? 'בביצוע' : 'בהמתנה'
-                        }
-                        size="small"
-                        color={getStatusColor(task.status)}
-                      />
-                    </Box>
-                  </Grid>
-                  <Grid item>
-                    <Stack direction="row" spacing={1}>
-                      <IconButton
-                        onClick={() => handleEdit(task)}
-                        color="primary"
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Grid container spacing={2}>
+          {Object.keys(TASK_STATUS).map((status) => (
+            <Grid item xs={12} md={4} key={status}>
+              <Card sx={{ height: '100%', backgroundColor: '#f5f5f5' }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    {TASK_STATUS[status]}
+                  </Typography>
+                  <Droppable droppableId={status}>
+                    {(provided) => (
+                      <Box
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        sx={{ minHeight: 100 }}
                       >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => handleDeleteTask(task.id)}
-                        color="error"
-                      >
+                        {getTasksByStatus(status).map((task, index) => (
+                          <Draggable
+                            key={task.id}
+                            draggableId={task.id.toString()}
+                            index={index}
+                          >
+                            {(provided) => (
+                              <Card 
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                sx={{ 
+                                  mb: 1,
+                                  '&:hover': {
+                                    boxShadow: 3,
+                                    transform: 'translateY(-2px)',
+                                    transition: 'all 0.2s ease-in-out'
+                                  },
+                                  borderRight: 3,
+                                  borderColor: task.status === 'DONE' ? 'success.light' : 
+                                             task.status === 'IN_PROGRESS' ? 'warning.light' : 
+                                             'info.light'
+                                }}
+                              >
+                                <CardContent>
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                                    <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
+                                      {task.title}
+                                    </Typography>
+                                    <Box>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTask(task);
+                                          setNewTask({
+                                            title: task.title,
+                                            description: task.description,
+                                            status: task.status,
+                                            type: task.type,
+                                            customType: task.customType,
+                                            date: task.date ? new Date(task.date) : null,
+                                            subtasks: task.subtasks || [],
+                                            owner: task.owner || ''
+                                          });
+                                          setOpenDialog(true);
+                                        }}
+                                        sx={{ color: 'primary.main' }}
+                                      >
+                                        <EditIcon />
+                                      </IconButton>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteTask(task.id);
+                                        }}
+                                        sx={{ color: 'error.main' }}
+                                      >
+                                        <DeleteIcon />
+                                      </IconButton>
+                                    </Box>
+                                  </Box>
+                                  {task.description && (
+                                    <Typography 
+                                      variant="body2" 
+                                      color="text.secondary" 
+                                      sx={{ 
+                                        mb: 2,
+                                        backgroundColor: 'grey.50',
+                                        p: 1,
+                                        borderRadius: 1
+                                      }}
+                                    >
+                                      {task.description}
+                                    </Typography>
+                                  )}
+                                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+                                    <Box>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                        סוג משימה
+                                      </Typography>
+                                      <Chip
+                                        size="small"
+                                        label={task.type}
+                                        sx={{ 
+                                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                                          color: 'primary.main',
+                                          fontWeight: 'medium'
+                                        }}
+                                      />
+                                    </Box>
+                                    {(task.date || task.owner) && (
+                                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                                        {task.date && (
+                                          <Box>
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                              תאריך יעד
+                                            </Typography>
+                                            <Chip
+                                              size="small"
+                                              label={new Date(task.date).toLocaleDateString('he-IL')}
+                                              icon={<EventIcon />}
+                                              sx={{ 
+                                                backgroundColor: 'rgba(156, 39, 176, 0.08)',
+                                                color: 'secondary.main',
+                                                '& .MuiChip-icon': {
+                                                  color: 'secondary.main'
+                                                }
+                                              }}
+                                            />
+                                          </Box>
+                                        )}
+                                        {task.owner && (
+                                          <Box>
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                              אחראי
+                                            </Typography>
+                                            <Chip
+                                              size="small"
+                                              label={task.owner}
+                                              icon={<PersonIcon />}
+                                              sx={{ 
+                                                backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                                                color: 'success.main',
+                                                '& .MuiChip-icon': {
+                                                  color: 'success.main'
+                                                }
+                                              }}
+                                            />
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    )}
+                                  </Box>
+                                  <Box 
+                                    sx={{ 
+                                      backgroundColor: 'grey.50',
+                                      borderRadius: 1,
+                                      p: 1
+                                    }}
+                                  >
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                      תתי משימות
+                                    </Typography>
+                                    {task.subtasks && task.subtasks.length > 0 && (
+                                      <List dense sx={{ mb: 1 }}>
+                                        {task.subtasks.map((subtask, index) => (
+                                          <ListItem
+                                            key={index}
+                                            dense
+                                            disablePadding
+                                            secondaryAction={
+                                              <Checkbox
+                                                edge="end"
+                                                checked={subtask.completed}
+                                                onChange={() => handleToggleSubtask(task.id, index)}
+                                                sx={{
+                                                  color: 'primary.light',
+                                                  '&.Mui-checked': {
+                                                    color: 'success.main',
+                                                  },
+                                                }}
+                                              />
+                                            }
+                                          >
+                                            <ListItemText 
+                                              primary={
+                                                <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                                                  <Typography
+                                                    component="span"
+                                                    variant="body2"
+                                                    color="text.secondary"
+                                                    sx={{ minWidth: '25px', fontWeight: 'medium' }}
+                                                  >
+                                                    {index + 1}.
+                                                  </Typography>
+                                                  <Typography
+                                                    component="span"
+                                                    sx={{
+                                                      textDecoration: subtask.completed ? 'line-through' : 'none',
+                                                      color: subtask.completed ? 'text.secondary' : 'text.primary'
+                                                    }}
+                                                  >
+                                                    {subtask.title}
+                                                  </Typography>
+                                                </Box>
+                                              }
+                                              sx={{ ml: 1 }}
+                                            />
+                                          </ListItem>
+                                        ))}
+                                      </List>
+                                    )}
+                                    {editingTaskId === task.id ? (
+                                      <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <TextField
+                                          size="small"
+                                          fullWidth
+                                          placeholder="הוסף תת משימה"
+                                          value={newSubtask}
+                                          onChange={(e) => setNewSubtask(e.target.value)}
+                                          onKeyPress={(e) => {
+                                            if (e.key === 'Enter' && newSubtask.trim()) {
+                                              handleAddSubtask(task.id, newSubtask.trim());
+                                            }
+                                          }}
+                                        />
+                                        <Button
+                                          size="small"
+                                          variant="outlined"
+                                          onClick={() => {
+                                            if (newSubtask.trim()) {
+                                              handleAddSubtask(task.id, newSubtask.trim());
+                                            }
+                                          }}
+                                        >
+                                          הוסף
+                                        </Button>
+                                      </Box>
+                                    ) : (
+                                      <Button
+                                        size="small"
+                                        startIcon={<AddIcon />}
+                                        onClick={() => setEditingTaskId(task.id)}
+                                        sx={{ mt: task.subtasks?.length > 0 ? 1 : 0 }}
+                                      >
+                                        הוסף תת משימה
+                                      </Button>
+                                    )}
+                                  </Box>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </Box>
+                    )}
+                  </Droppable>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </DragDropContext>
+
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {selectedTask ? 'עריכת משימה' : 'משימה חדשה'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                autoFocus
+                label="כותרת"
+                fullWidth
+                required
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                error={!newTask.title.trim()}
+                helperText={!newTask.title.trim() ? 'שדה חובה' : ''}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                select
+                label="סוג משימה"
+                fullWidth
+                value={newTask.type === 'אחר' && newTask.customType ? 'אחר' : newTask.type}
+                onChange={(e) => {
+                  if (e.target.value === 'אחר') {
+                    setNewTask({ ...newTask, type: 'אחר', customType: '' });
+                  } else {
+                    setNewTask({ ...newTask, type: e.target.value, customType: '' });
+                  }
+                }}
+                required
+              >
+                {eventTypes.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            {(newTask.type === 'אחר' || !eventTypes.includes(newTask.type)) && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="הזן סוג משימה"
+                  value={newTask.customType}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNewTask({ ...newTask, type: 'אחר', customType: value });
+                  }}
+                  required
+                  placeholder="הקלד סוג משימה מותאם אישית"
+                />
+              </Grid>
+            )}
+            <Grid item xs={12}>
+              <TextField
+                label="תיאור"
+                fullWidth
+                multiline
+                rows={4}
+                value={newTask.description}
+                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DatePicker
+                  label="תאריך יעד"
+                  value={newTask.date}
+                  onChange={(newDate) => setNewTask({ ...newTask, date: newDate })}
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="אחראי משימה"
+                fullWidth
+                value={newTask.owner}
+                onChange={(e) => setNewTask({ ...newTask, owner: e.target.value })}
+                placeholder="הזן את שם האחראי"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                select
+                label="סטטוס"
+                fullWidth
+                value={newTask.status}
+                onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+              >
+                <MenuItem value="TODO">לביצוע</MenuItem>
+                <MenuItem value="IN_PROGRESS">בתהליך</MenuItem>
+                <MenuItem value="DONE">הושלם</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                תתי משימות
+              </Typography>
+              <List dense>
+                {newTask.subtasks.map((subtask, index) => (
+                  <ListItem
+                    key={index}
+                    secondaryAction={
+                      <IconButton edge="end" onClick={() => {
+                        const newSubtasks = [...newTask.subtasks];
+                        newSubtasks.splice(index, 1);
+                        setNewTask({ ...newTask, subtasks: newSubtasks });
+                      }}>
                         <DeleteIcon />
                       </IconButton>
-                      <IconButton
-                        onClick={() => {
-                          setCurrentParentTask(task);
-                          setSubtaskDialogOpen(true);
-                        }}
-                        color="primary"
-                      >
-                        <AddIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => toggleTaskExpansion(task.id)}
-                        color="primary"
-                      >
-                        {expandedTasks.includes(task.id) ? (
-                          <ExpandLessIcon />
-                        ) : (
-                          <ExpandMoreIcon />
-                        )}
-                      </IconButton>
-                    </Stack>
-                  </Grid>
-                </Grid>
-              </CardContent>
-              {renderSubtasks(task)}
-            </Card>
+                    }
+                  >
+                    <ListItemText 
+                      primary={
+                        <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Typography
+                            component="span"
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ minWidth: '25px', fontWeight: 'medium' }}
+                          >
+                            {index + 1}.
+                          </Typography>
+                          <Typography component="span">
+                            {subtask.title}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="הוסף תת משימה"
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && newSubtask.trim()) {
+                      const subtask = {
+                        title: newSubtask.trim(),
+                        completed: false
+                      };
+                      setNewTask({
+                        ...newTask,
+                        subtasks: [...newTask.subtasks, subtask]
+                      });
+                      setNewSubtask('');
+                    }
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    if (newSubtask.trim()) {
+                      const subtask = {
+                        title: newSubtask.trim(),
+                        completed: false
+                      };
+                      setNewTask({
+                        ...newTask,
+                        subtasks: [...newTask.subtasks, subtask]
+                      });
+                      setNewSubtask('');
+                    }
+                  }}
+                >
+                  הוסף
+                </Button>
+              </Box>
+            </Grid>
           </Grid>
-        ))}
-      </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>ביטול</Button>
+          <Button onClick={handleSaveTask} variant="contained" color="primary">
+            {selectedTask ? 'שמור שינויים' : 'צור משימה'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
