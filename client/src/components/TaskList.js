@@ -84,10 +84,31 @@ const TaskList = ({ tasks: initialTasks }) => {
         setLoading(true);
         setError(null);
         
-        const { data, error } = await supabase
+        // קבלת המשתמש הנוכחי
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error('לא נמצא משתמש מחובר');
+        }
+
+        // בדיקה אם למשתמש יש הרשאת view_all_tasks
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('permissions')
+          .eq('id', user.id)
+          .single();
+
+        let query = supabase
           .from('tasks')
           .select('*')
           .order('created_at', { ascending: false });
+
+        // אם אין הרשאת view_all_tasks, מציגים רק את המשימות של המשתמש
+        if (!userProfile?.permissions?.includes('view_all_tasks')) {
+          query = query.eq('user_id', user.id);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         setTasks(data || []);
