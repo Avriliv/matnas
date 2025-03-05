@@ -91,24 +91,19 @@ const TaskList = ({ tasks: initialTasks }) => {
           throw new Error('לא נמצא משתמש מחובר');
         }
 
-        // בדיקה אם למשתמש יש הרשאת view_all_tasks
+        // קבלת הפרופיל של המשתמש עם ההרשאות
         const { data: userProfile } = await supabase
           .from('profiles')
-          .select('permissions')
+          .select('can_view_tasks_from')
           .eq('id', user.id)
           .single();
 
-        let query = supabase
+        // מביאים את המשימות של המשתמש עצמו ושל המשתמשים שהוא יכול לראות
+        const { data, error } = await supabase
           .from('tasks')
           .select('*')
+          .or(`user_id.eq.${user.id}${userProfile?.can_view_tasks_from?.length ? `,user_id.in.(${userProfile.can_view_tasks_from.join(',')})` : ''}`)
           .order('created_at', { ascending: false });
-
-        // אם אין הרשאת view_all_tasks, מציגים רק את המשימות של המשתמש
-        if (!userProfile?.permissions?.includes('view_all_tasks')) {
-          query = query.eq('user_id', user.id);
-        }
-
-        const { data, error } = await query;
 
         if (error) throw error;
         setTasks(data || []);
@@ -159,9 +154,8 @@ const TaskList = ({ tasks: initialTasks }) => {
         .update({ status: newStatus })
         .eq('id', taskId);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
+
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס משימה:', error);
       // במקרה של שגיאה, מחזירים את המצב הקודם
