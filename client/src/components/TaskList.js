@@ -34,6 +34,7 @@ import EventIcon from '@mui/icons-material/Event';
 import PersonIcon from '@mui/icons-material/Person';
 import { supabase } from '../supabaseClient';
 import ExportButtons from './ExportButtons';
+import { showNewTaskNotification, showNewSubtaskNotification } from '../services/notificationService';
 
 const TASK_STATUS = {
   TODO: 'לביצוע',
@@ -145,14 +146,18 @@ const TaskList = () => {
           throw error;
         }
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('tasks')
-          .insert([taskData]);
+          .insert([taskData])
+          .select();
 
         if (error) {
           console.error('שגיאת הוספה:', error);
           throw error;
         }
+
+        setTasks([...tasks, data[0]]);
+        showNewTaskNotification(data[0]);
       }
 
       setOpenDialog(false);
@@ -211,24 +216,26 @@ const TaskList = () => {
 
   const handleAddSubtask = async (taskId, subtaskTitle) => {
     try {
-      const taskToUpdate = tasks.find(t => t.id === taskId);
-      if (!taskToUpdate) return;
+      const parentTask = tasks.find(t => t.id === taskId);
+      const newSubtask = {
+        title: subtaskTitle,
+        completed: false
+      };
 
-      const updatedSubtasks = [...(taskToUpdate.subtasks || []), { title: subtaskTitle, completed: false }];
-      
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('tasks')
-        .update({ subtasks: updatedSubtasks })
+        .update({ subtasks: [...(parentTask.subtasks || []), newSubtask] })
         .eq('id', taskId);
 
       if (error) throw error;
 
       const updatedTasks = tasks.map(task =>
-        task.id === taskId ? { ...task, subtasks: updatedSubtasks } : task
+        task.id === taskId ? { ...task, subtasks: [...(task.subtasks || []), newSubtask] } : task
       );
       setTasks(updatedTasks);
       setNewSubtask('');
       setEditingTaskId(null);
+      showNewSubtaskNotification(parentTask, newSubtask);
     } catch (error) {
       console.error('שגיאה בהוספת תת משימה:', error);
     }

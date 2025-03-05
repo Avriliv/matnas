@@ -17,6 +17,7 @@ import {
   Button,
   TextField
 } from '@mui/material';
+import { showNewTaskNotification } from '../services/notificationService';
 
 function SimpleCalendar() {
   const [events, setEvents] = useState([]);
@@ -121,6 +122,12 @@ function SimpleCalendar() {
       };
 
       setEvents(prev => [...prev, newEventFormatted]);
+      showNewTaskNotification({
+        title: newEvent.title,
+        due_date: newEvent.start,
+        type: 'אירוע מחלקה'
+      });
+      
       setOpenDialog(false);
       setNewEvent({
         title: '',
