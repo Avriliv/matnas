@@ -455,6 +455,11 @@ const TaskList = () => {
                                             key={index}
                                             dense
                                             disablePadding
+                                            sx={{
+                                              py: 0.5, // מרווח אנכי בין תתי המשימות
+                                              pr: { xs: 7, sm: 6 }, // מרווח מימין במובייל וטאבלט
+                                              pl: { xs: 1, sm: 2 }, // מרווח משמאל במובייל וטאבלט
+                                            }}
                                             secondaryAction={
                                               <Checkbox
                                                 edge="end"
@@ -465,18 +470,28 @@ const TaskList = () => {
                                                   '&.Mui-checked': {
                                                     color: 'success.main',
                                                   },
+                                                  mr: -5, // מזיז את הצ'קבוקס שמאלה
+                                                  transform: 'scale(1.1)' // מגדיל מעט את הצ'קבוקס
                                                 }}
                                               />
                                             }
                                           >
                                             <ListItemText 
                                               primary={
-                                                <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                                                <Box component="span" sx={{ 
+                                                  display: 'flex', 
+                                                  alignItems: 'center',
+                                                  width: '100%' // מוודא שהטקסט תופס את כל הרוחב
+                                                }}>
                                                   <Typography
                                                     component="span"
                                                     variant="body2"
                                                     color="text.secondary"
-                                                    sx={{ minWidth: '25px', fontWeight: 'medium' }}
+                                                    sx={{ 
+                                                      minWidth: '25px',
+                                                      fontWeight: 'medium',
+                                                      ml: { xs: 0, sm: 1 } // מרווח משמאל במובייל וטאבלט
+                                                    }}
                                                   >
                                                     {index + 1}.
                                                   </Typography>
@@ -484,14 +499,15 @@ const TaskList = () => {
                                                     component="span"
                                                     sx={{
                                                       textDecoration: subtask.completed ? 'line-through' : 'none',
-                                                      color: subtask.completed ? 'text.secondary' : 'text.primary'
+                                                      color: subtask.completed ? 'text.secondary' : 'text.primary',
+                                                      fontSize: { xs: '0.9rem', sm: '1rem' }, // גודל טקסט קטן יותר במובייל
+                                                      pr: 2 // מרווח מימין לטקסט
                                                     }}
                                                   >
                                                     {subtask.title}
                                                   </Typography>
                                                 </Box>
                                               }
-                                              sx={{ ml: 1 }}
                                             />
                                           </ListItem>
                                         ))}
