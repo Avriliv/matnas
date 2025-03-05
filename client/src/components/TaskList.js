@@ -27,7 +27,8 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   Event as EventIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Notifications as NotificationsIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -35,6 +36,8 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import ExportButtons from './ExportButtons';
 import { showNewTaskNotification, showNewSubtaskNotification } from '../services/notificationService';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const TASK_STATUS = {
   TODO: 'לביצוע',
@@ -73,6 +76,15 @@ const TaskList = ({ tasks: initialTasks }) => {
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedNotificationTask, setSelectedNotificationTask] = useState(null);
+  const [selectedSubtaskIndex, setSelectedSubtaskIndex] = useState(null);
+  const [notificationDialog, setNotificationDialog] = useState(false);
+  const [newNotification, setNewNotification] = useState({
+    type: 'before_due',
+    days_before: 1,
+    notify_date: null,
+    status: 'DONE'
+  });
 
   useEffect(() => {
     setTasks(initialTasks || []);
@@ -283,6 +295,45 @@ const TaskList = ({ tasks: initialTasks }) => {
     }
   };
 
+  const handleAddNotification = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error('לא נמצא משתמש מחובר');
+
+      const notification = {
+        task_id: selectedNotificationTask.id,
+        subtask_index: selectedSubtaskIndex,
+        type: newNotification.type,
+        days_before: newNotification.type === 'before_due' ? newNotification.days_before : null,
+        notify_date: newNotification.type === 'on_date' ? newNotification.notify_date : null,
+        status: newNotification.type === 'on_status' ? newNotification.status : null,
+        user_id: user.id
+      };
+
+      const { error } = await supabase
+        .from('task_notifications')
+        .insert([notification]);
+
+      if (error) throw error;
+
+      setNotificationDialog(false);
+      setSelectedNotificationTask(null);
+      setSelectedSubtaskIndex(null);
+      setNewNotification({
+        type: 'before_due',
+        days_before: 1,
+        notify_date: null,
+        status: 'DONE'
+      });
+
+      toast.success('ההתראה נוספה בהצלחה');
+    } catch (error) {
+      console.error('שגיאה בהוספת התראה:', error);
+      toast.error('שגיאה בהוספת ההתראה');
+    }
+  };
+
   const exportColumns = [
     { field: 'title', headerName: 'כותרת' },
     { field: 'description', headerName: 'תיאור' },
@@ -300,6 +351,7 @@ const TaskList = ({ tasks: initialTasks }) => {
 
   return (
     <Box sx={{ p: 3 }}>
+      <ToastContainer />
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">משימות ואירועים</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -421,6 +473,18 @@ const TaskList = ({ tasks: initialTasks }) => {
                                             sx={{ color: 'error.main' }}
                                           >
                                             <DeleteIcon />
+                                          </IconButton>
+                                          <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedNotificationTask(task);
+                                              setSelectedSubtaskIndex(null);
+                                              setNotificationDialog(true);
+                                            }}
+                                            sx={{ color: 'primary.main' }}
+                                          >
+                                            <NotificationsIcon />
                                           </IconButton>
                                         </Box>
                                       </Box>
@@ -808,6 +872,72 @@ const TaskList = ({ tasks: initialTasks }) => {
           <Button onClick={handleSaveTask} variant="contained" color="primary">
             {selectedTask ? 'שמור שינויים' : 'צור משימה'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={notificationDialog} 
+        onClose={() => setNotificationDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>הגדרת התראה חדשה</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              select
+              fullWidth
+              label="סוג התראה"
+              value={newNotification.type}
+              onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value })}
+              sx={{ mb: 2 }}
+            >
+              <MenuItem value="before_due">לפני תאריך היעד</MenuItem>
+              <MenuItem value="on_date">בתאריך מסוים</MenuItem>
+              <MenuItem value="on_status">בשינוי סטטוס</MenuItem>
+            </TextField>
+
+            {newNotification.type === 'before_due' && (
+              <TextField
+                type="number"
+                fullWidth
+                label="מספר ימים לפני"
+                value={newNotification.days_before}
+                onChange={(e) => setNewNotification({ ...newNotification, days_before: parseInt(e.target.value) })}
+                sx={{ mb: 2 }}
+              />
+            )}
+
+            {newNotification.type === 'on_date' && (
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DatePicker
+                  label="תאריך להתראה"
+                  value={newNotification.notify_date}
+                  onChange={(date) => setNewNotification({ ...newNotification, notify_date: date })}
+                  slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
+                />
+              </LocalizationProvider>
+            )}
+
+            {newNotification.type === 'on_status' && (
+              <TextField
+                select
+                fullWidth
+                label="סטטוס"
+                value={newNotification.status}
+                onChange={(e) => setNewNotification({ ...newNotification, status: e.target.value })}
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value="TODO">לביצוע</MenuItem>
+                <MenuItem value="IN_PROGRESS">בתהליך</MenuItem>
+                <MenuItem value="DONE">הושלם</MenuItem>
+              </TextField>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNotificationDialog(false)}>ביטול</Button>
+          <Button onClick={handleAddNotification} variant="contained">הוסף התראה</Button>
         </DialogActions>
       </Dialog>
 
