@@ -348,8 +348,8 @@ const FormsLibrary = () => {
 
       if (error) throw error;
 
-      // פתיחת הקובץ בחלון חדש במקום בדיאלוג
-      window.open(signedUrl, '_blank');
+      setPreviewUrl(signedUrl);
+      setOpenPreview(true);
     } catch (error) {
       console.error('Error creating preview URL:', error);
       alert('שגיאה ביצירת תצוגה מקדימה');
@@ -360,6 +360,33 @@ const FormsLibrary = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* תצוגה מקדימה של קובץ */}
+      <Dialog
+        open={openPreview}
+        onClose={() => setOpenPreview(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle sx={{ textAlign: 'center' }}>
+          תצוגה מקדימה
+          <IconButton
+            onClick={() => setOpenPreview(false)}
+            sx={{ position: 'absolute', left: 8, top: 8 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ width: '100%', height: '80vh', overflow: 'auto' }}>
+            <iframe
+              src={previewUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              title="תצוגה מקדימה"
+            />
+          </Box>
+        </DialogContent>
+      </Dialog>
+
       {/* כותרת וכפתור יצירת תיקייה */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 'bold' }}>אישורים וטפסים</Typography>
