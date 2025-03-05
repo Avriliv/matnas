@@ -2,37 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   Box,
-  Card,
-  CardContent,
+  Button,
   Typography,
   IconButton,
-  Grid,
-  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button,
   TextField,
   MenuItem,
+  Grid,
+  Card,
+  CardContent,
   List,
   ListItem,
   ListItemText,
   Checkbox,
-  FormControl,
-  InputLabel,
-  Select,
-  InputAdornment
+  Chip,
+  Alert,
+  CircularProgress
 } from '@mui/material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Event as EventIcon,
+  Person as PersonIcon
+} from '@mui/icons-material';
+import { supabase } from '../supabaseClient';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EventIcon from '@mui/icons-material/Event';
-import PersonIcon from '@mui/icons-material/Person';
-import { supabase } from '../supabaseClient';
 import ExportButtons from './ExportButtons';
 import { showNewTaskNotification, showNewSubtaskNotification } from '../services/notificationService';
 
@@ -53,8 +53,8 @@ const eventTypes = [
   'אחר'
 ];
 
-const TaskList = () => {
-  const [tasks, setTasks] = useState([]);
+const TaskList = ({ tasks: initialTasks }) => {
+  const [tasks, setTasks] = useState(initialTasks || []);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [newTask, setNewTask] = useState({
@@ -71,50 +71,88 @@ const TaskList = () => {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchTasks();
+    setTasks(initialTasks || []);
+  }, [initialTasks]);
+
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const { data, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setTasks(data || []);
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        setError(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTasks();
   }, []);
-
-  const fetchTasks = async () => {
-    try {
-      console.log('מתחיל לטעון משימות...');
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      console.log('משימות נטענו בהצלחה:', data);
-      setTasks(data || []);
-    } catch (error) {
-      console.error('שגיאה בטעינת משימות:', error);
-    }
-  };
 
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
 
     const { source, destination } = result;
-    const taskId = result.draggableId;
-    const newStatus = destination.droppableId;
+    
+    // אם אין שינוי במיקום, לא עושים כלום
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return;
+    }
 
     try {
+      // מעדכנים את הסטטוס בבסיס הנתונים
+      const taskId = result.draggableId;
+      const newStatus = destination.droppableId;
+
+      // עדכון מקומי לפני העדכון בשרת
+      const updatedTasks = [...tasks];
+      const taskIndex = updatedTasks.findIndex(t => t.id.toString() === taskId);
+      
+      if (taskIndex !== -1) {
+        updatedTasks[taskIndex] = {
+          ...updatedTasks[taskIndex],
+          status: newStatus
+        };
+        setTasks(updatedTasks);
+      }
+
+      // עדכון בשרת
       const { error } = await supabase
         .from('tasks')
         .update({ status: newStatus })
         .eq('id', taskId);
 
-      if (error) throw error;
-
-      // עדכון ה-state המקומי
-      const updatedTasks = [...tasks];
-      const taskIndex = updatedTasks.findIndex(t => t.id.toString() === taskId);
-      updatedTasks[taskIndex].status = newStatus;
-      setTasks(updatedTasks);
+      if (error) {
+        throw error;
+      }
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס משימה:', error);
+      // במקרה של שגיאה, מחזירים את המצב הקודם
+      const { data } = await supabase.from('tasks').select('*');
+      if (data) {
+        setTasks(data);
+      }
     }
+  };
+
+  const getTasksByStatus = (status) => {
+    return tasks.filter(task => task.status === status);
   };
 
   const handleSaveTask = async () => {
@@ -135,35 +173,39 @@ const TaskList = () => {
         created_at: new Date().toISOString()
       };
 
+      let updatedTask;
+      
       if (selectedTask) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('tasks')
           .update(taskData)
-          .eq('id', selectedTask.id);
+          .eq('id', selectedTask.id)
+          .select()
+          .single();
 
-        if (error) {
-          console.error('שגיאת עדכון:', error);
-          throw error;
-        }
+        if (error) throw error;
+        updatedTask = data;
+        
+        setTasks(tasks.map(task => 
+          task.id === selectedTask.id ? updatedTask : task
+        ));
       } else {
         const { data, error } = await supabase
           .from('tasks')
           .insert([taskData])
-          .select();
+          .select()
+          .single();
 
-        if (error) {
-          console.error('שגיאת הוספה:', error);
-          throw error;
-        }
-
-        setTasks([...tasks, data[0]]);
-        showNewTaskNotification(data[0]);
+        if (error) throw error;
+        updatedTask = data;
+        
+        setTasks([...tasks, updatedTask]);
+        showNewTaskNotification(updatedTask);
       }
 
       setOpenDialog(false);
       setSelectedTask(null);
       setNewTask({ title: '', description: '', status: 'TODO', type: 'משימה', customType: '', date: null, subtasks: [], owner: '' });
-      fetchTasks();
     } catch (error) {
       console.error('שגיאה בשמירת משימה:', error);
       alert('שגיאה בשמירת המשימה: ' + error.message);
@@ -241,11 +283,6 @@ const TaskList = () => {
     }
   };
 
-  const getTasksByStatus = (status) => {
-    return tasks.filter(task => task.status === status);
-  };
-
-  // הגדרת העמודות לייצוא
   const exportColumns = [
     { field: 'title', headerName: 'כותרת' },
     { field: 'description', headerName: 'תיאור' },
@@ -256,14 +293,13 @@ const TaskList = () => {
     { field: 'subtasks', headerName: 'תתי משימות' }
   ];
 
-  // עיבוד הנתונים לייצוא
   const exportData = tasks.map(task => ({
     ...task,
     subtasks: task.subtasks || []
   }));
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">משימות ואירועים</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -287,285 +323,308 @@ const TaskList = () => {
         </Box>
       </Box>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Grid container spacing={2}>
-          {Object.keys(TASK_STATUS).map((status) => (
-            <Grid item xs={12} md={4} key={status}>
-              <Card sx={{ height: '100%', backgroundColor: '#f5f5f5' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {TASK_STATUS[status]}
-                  </Typography>
-                  <Droppable droppableId={status}>
-                    {(provided) => (
-                      <Box
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        sx={{ minHeight: 100 }}
-                      >
-                        {getTasksByStatus(status).map((task, index) => (
-                          <Draggable
-                            key={task.id}
-                            draggableId={task.id.toString()}
-                            index={index}
-                          >
-                            {(provided) => (
-                              <Card 
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                sx={{ 
-                                  mb: 1,
-                                  '&:hover': {
-                                    boxShadow: 3,
-                                    transform: 'translateY(-2px)',
-                                    transition: 'all 0.2s ease-in-out'
-                                  },
-                                  borderRight: 3,
-                                  borderColor: task.status === 'DONE' ? 'success.light' : 
-                                             task.status === 'IN_PROGRESS' ? 'warning.light' : 
-                                             'info.light'
-                                }}
-                              >
-                                <CardContent>
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                    <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
-                                      {task.title}
-                                    </Typography>
-                                    <Box>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedTask(task);
-                                          setNewTask({
-                                            title: task.title,
-                                            description: task.description,
-                                            status: task.status,
-                                            type: task.type,
-                                            customType: task.customType,
-                                            date: task.date ? new Date(task.date) : null,
-                                            subtasks: task.subtasks || [],
-                                            owner: task.owner || ''
-                                          });
-                                          setOpenDialog(true);
-                                        }}
-                                        sx={{ color: 'primary.main' }}
-                                      >
-                                        <EditIcon />
-                                      </IconButton>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDeleteClick(task.id);
-                                        }}
-                                        sx={{ color: 'error.main' }}
-                                      >
-                                        <DeleteIcon />
-                                      </IconButton>
-                                    </Box>
-                                  </Box>
-                                  {task.description && (
-                                    <Typography 
-                                      variant="body2" 
-                                      color="text.secondary" 
-                                      sx={{ 
-                                        mb: 2,
-                                        backgroundColor: 'grey.50',
-                                        p: 1,
-                                        borderRadius: 1
-                                      }}
-                                    >
-                                      {task.description}
-                                    </Typography>
-                                  )}
-                                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
-                                    <Box>
-                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                                        סוג משימה
-                                      </Typography>
-                                      <Chip
-                                        size="small"
-                                        label={task.type}
-                                        sx={{ 
-                                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                                          color: 'primary.main',
-                                          fontWeight: 'medium'
-                                        }}
-                                      />
-                                    </Box>
-                                    {(task.date || task.owner) && (
-                                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-                                        {task.date && (
-                                          <Box>
-                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                                              תאריך יעד
-                                            </Typography>
-                                            <Chip
-                                              size="small"
-                                              label={new Date(task.date).toLocaleDateString('he-IL')}
-                                              icon={<EventIcon />}
-                                              sx={{ 
-                                                backgroundColor: 'rgba(156, 39, 176, 0.08)',
-                                                color: 'secondary.main',
-                                                '& .MuiChip-icon': {
-                                                  color: 'secondary.main'
-                                                }
-                                              }}
-                                            />
-                                          </Box>
-                                        )}
-                                        {task.owner && (
-                                          <Box>
-                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                                              אחראי
-                                            </Typography>
-                                            <Chip
-                                              size="small"
-                                              label={task.owner}
-                                              icon={<PersonIcon />}
-                                              sx={{ 
-                                                backgroundColor: 'rgba(76, 175, 80, 0.08)',
-                                                color: 'success.main',
-                                                '& .MuiChip-icon': {
-                                                  color: 'success.main'
-                                                }
-                                              }}
-                                            />
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    )}
-                                  </Box>
-                                  <Box 
+      {loading ? (
+        <CircularProgress />
+      ) : error ? (
+        <Alert severity="error">{error}</Alert>
+      ) : tasks.length === 0 ? (
+        <Alert severity="info">אין משימות</Alert>
+      ) : (
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Grid container spacing={2}>
+            {Object.keys(TASK_STATUS).map((status) => (
+              <Grid item xs={12} md={4} key={status}>
+                <Card sx={{ height: '100%', backgroundColor: '#f5f5f5', overflow: 'visible' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      {TASK_STATUS[status]}
+                    </Typography>
+                    <Droppable droppableId={status}>
+                      {(provided, snapshot) => (
+                        <Box
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          sx={{ 
+                            minHeight: 100,
+                            backgroundColor: snapshot.isDraggingOver ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
+                            transition: 'background-color 0.2s ease',
+                            borderRadius: 1,
+                            p: 1
+                          }}
+                        >
+                          {getTasksByStatus(status).map((task, index) => (
+                            <Draggable
+                              key={task.id}
+                              draggableId={task.id.toString()}
+                              index={index}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                >
+                                  <Card 
                                     sx={{ 
-                                      backgroundColor: 'grey.50',
-                                      borderRadius: 1,
-                                      p: 1
+                                      mb: 1,
+                                      cursor: 'grab',
+                                      transform: snapshot.isDragging ? 'rotate(2deg) !important' : 'none',
+                                      zIndex: snapshot.isDragging ? 1 : 'auto',
+                                      position: 'relative',
+                                      '&:hover': {
+                                        boxShadow: 3,
+                                        transform: 'translateY(-2px)',
+                                      },
+                                      '&:active': {
+                                        cursor: 'grabbing',
+                                      },
+                                      borderRight: 3,
+                                      borderColor: task.status === 'DONE' ? 'success.light' : 
+                                                 task.status === 'IN_PROGRESS' ? 'warning.light' : 
+                                                 'info.light',
+                                      backgroundColor: snapshot.isDragging ? 'grey.100' : 'background.paper'
                                     }}
                                   >
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                      תתי משימות
-                                    </Typography>
-                                    {task.subtasks && task.subtasks.length > 0 && (
-                                      <List dense sx={{ mb: 1 }}>
-                                        {task.subtasks.map((subtask, index) => (
-                                          <ListItem
-                                            key={index}
-                                            dense
-                                            disablePadding
-                                            sx={{
-                                              py: 0.5, // מרווח אנכי בין תתי המשימות
-                                              pr: { xs: 7, sm: 6 }, // מרווח מימין במובייל וטאבלט
-                                              pl: { xs: 1, sm: 2 }, // מרווח משמאל במובייל וטאבלט
+                                    <CardContent>
+                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                                        <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
+                                          {task.title}
+                                        </Typography>
+                                        <Box>
+                                          <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedTask(task);
+                                              setNewTask({
+                                                title: task.title,
+                                                description: task.description,
+                                                status: task.status,
+                                                type: task.type,
+                                                customType: task.customType,
+                                                date: task.date ? new Date(task.date) : null,
+                                                subtasks: task.subtasks || [],
+                                                owner: task.owner || ''
+                                              });
+                                              setOpenDialog(true);
                                             }}
-                                            secondaryAction={
-                                              <Checkbox
-                                                edge="end"
-                                                checked={subtask.completed}
-                                                onChange={() => handleToggleSubtask(task.id, index)}
-                                                sx={{
-                                                  color: 'primary.light',
-                                                  '&.Mui-checked': {
-                                                    color: 'success.main',
-                                                  },
-                                                  mr: -5, // מזיז את הצ'קבוקס שמאלה
-                                                  transform: 'scale(1.1)' // מגדיל מעט את הצ'קבוקס
-                                                }}
-                                              />
-                                            }
+                                            sx={{ color: 'primary.main' }}
                                           >
-                                            <ListItemText 
-                                              primary={
-                                                <Box component="span" sx={{ 
-                                                  display: 'flex', 
-                                                  alignItems: 'center',
-                                                  width: '100%' // מוודא שהטקסט תופס את כל הרוחב
-                                                }}>
-                                                  <Typography
-                                                    component="span"
-                                                    variant="body2"
-                                                    color="text.secondary"
-                                                    sx={{ 
-                                                      minWidth: '25px',
-                                                      fontWeight: 'medium',
-                                                      ml: { xs: 0, sm: 1 } // מרווח משמאל במובייל וטאבלט
-                                                    }}
-                                                  >
-                                                    {index + 1}.
-                                                  </Typography>
-                                                  <Typography
-                                                    component="span"
-                                                    sx={{
-                                                      textDecoration: subtask.completed ? 'line-through' : 'none',
-                                                      color: subtask.completed ? 'text.secondary' : 'text.primary',
-                                                      fontSize: { xs: '0.9rem', sm: '1rem' }, // גודל טקסט קטן יותר במובייל
-                                                      pr: 2 // מרווח מימין לטקסט
-                                                    }}
-                                                  >
-                                                    {subtask.title}
-                                                  </Typography>
-                                                </Box>
-                                              }
-                                            />
-                                          </ListItem>
-                                        ))}
-                                      </List>
-                                    )}
-                                    {editingTaskId === task.id ? (
-                                      <Box sx={{ display: 'flex', gap: 1 }}>
-                                        <TextField
-                                          size="small"
-                                          fullWidth
-                                          placeholder="הוסף תת משימה"
-                                          value={newSubtask}
-                                          onChange={(e) => setNewSubtask(e.target.value)}
-                                          onKeyPress={(e) => {
-                                            if (e.key === 'Enter' && newSubtask.trim()) {
-                                              handleAddSubtask(task.id, newSubtask.trim());
-                                            }
-                                          }}
-                                        />
-                                        <Button
-                                          size="small"
-                                          variant="outlined"
-                                          onClick={() => {
-                                            if (newSubtask.trim()) {
-                                              handleAddSubtask(task.id, newSubtask.trim());
-                                            }
+                                            <EditIcon />
+                                          </IconButton>
+                                          <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteClick(task.id);
+                                            }}
+                                            sx={{ color: 'error.main' }}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </Box>
+                                      </Box>
+                                      {task.description && (
+                                        <Typography 
+                                          variant="body2" 
+                                          color="text.secondary" 
+                                          sx={{ 
+                                            mb: 2,
+                                            backgroundColor: 'grey.50',
+                                            p: 1,
+                                            borderRadius: 1
                                           }}
                                         >
-                                          הוסף
-                                        </Button>
+                                          {task.description}
+                                        </Typography>
+                                      )}
+                                      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+                                        <Box>
+                                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                            סוג משימה
+                                          </Typography>
+                                          <Chip
+                                            size="small"
+                                            label={task.type}
+                                            sx={{ 
+                                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                                              color: 'primary.main',
+                                              fontWeight: 'medium'
+                                            }}
+                                          />
+                                        </Box>
+                                        {(task.date || task.owner) && (
+                                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                                            {task.date && (
+                                              <Box>
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                                  תאריך יעד
+                                                </Typography>
+                                                <Chip
+                                                  size="small"
+                                                  label={new Date(task.date).toLocaleDateString('he-IL')}
+                                                  icon={<EventIcon />}
+                                                  sx={{ 
+                                                    backgroundColor: 'rgba(156, 39, 176, 0.08)',
+                                                    color: 'secondary.main',
+                                                    '& .MuiChip-icon': {
+                                                      color: 'secondary.main'
+                                                    }
+                                                  }}
+                                                />
+                                              </Box>
+                                            )}
+                                            {task.owner && (
+                                              <Box>
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                                  אחראי
+                                                </Typography>
+                                                <Chip
+                                                  size="small"
+                                                  label={task.owner}
+                                                  icon={<PersonIcon />}
+                                                  sx={{ 
+                                                    backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                                                    color: 'success.main',
+                                                    '& .MuiChip-icon': {
+                                                      color: 'success.main'
+                                                    }
+                                                  }}
+                                                />
+                                              </Box>
+                                            )}
+                                          </Box>
+                                        )}
                                       </Box>
-                                    ) : (
-                                      <Button
-                                        size="small"
-                                        startIcon={<AddIcon />}
-                                        onClick={() => setEditingTaskId(task.id)}
-                                        sx={{ mt: task.subtasks?.length > 0 ? 1 : 0 }}
+                                      <Box 
+                                        sx={{ 
+                                          backgroundColor: 'grey.50',
+                                          borderRadius: 1,
+                                          p: 1
+                                        }}
                                       >
-                                        הוסף תת משימה
-                                      </Button>
-                                    )}
-                                  </Box>
-                                </CardContent>
-                              </Card>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </Box>
-                    )}
-                  </Droppable>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </DragDropContext>
-
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                          תתי משימות
+                                        </Typography>
+                                        {task.subtasks && task.subtasks.length > 0 && (
+                                          <List dense sx={{ mb: 1 }}>
+                                            {task.subtasks.map((subtask, index) => (
+                                              <ListItem
+                                                key={index}
+                                                dense
+                                                disablePadding
+                                                sx={{
+                                                  py: 0.5,
+                                                  pr: { xs: 8, sm: 7 },
+                                                  pl: { xs: 1, sm: 2 },
+                                                }}
+                                                secondaryAction={
+                                                  <Checkbox
+                                                    edge="end"
+                                                    checked={subtask.completed}
+                                                    onChange={() => handleToggleSubtask(task.id, index)}
+                                                    sx={{
+                                                      color: 'primary.light',
+                                                      '&.Mui-checked': {
+                                                        color: 'success.main',
+                                                      },
+                                                      mr: -6,
+                                                      transform: 'scale(1.1)'
+                                                    }}
+                                                  />
+                                                }
+                                              >
+                                                <ListItemText 
+                                                  primary={
+                                                    <Box component="span" sx={{ 
+                                                      display: 'flex', 
+                                                      alignItems: 'center',
+                                                      width: '100%'
+                                                    }}>
+                                                      <Typography
+                                                        component="span"
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                        sx={{ 
+                                                          minWidth: '25px',
+                                                          fontWeight: 'medium',
+                                                          ml: { xs: 0, sm: 1 }
+                                                        }}
+                                                      >
+                                                        {index + 1}.
+                                                      </Typography>
+                                                      <Typography
+                                                        component="span"
+                                                        sx={{
+                                                          textDecoration: subtask.completed ? 'line-through' : 'none',
+                                                          color: subtask.completed ? 'text.secondary' : 'text.primary',
+                                                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                                                          pr: 3
+                                                        }}
+                                                      >
+                                                        {subtask.title}
+                                                      </Typography>
+                                                    </Box>
+                                                  }
+                                                />
+                                              </ListItem>
+                                            ))}
+                                          </List>
+                                        )}
+                                        {editingTaskId === task.id ? (
+                                          <Box sx={{ display: 'flex', gap: 1 }}>
+                                            <TextField
+                                              size="small"
+                                              fullWidth
+                                              placeholder="הוסף תת משימה"
+                                              value={newSubtask}
+                                              onChange={(e) => setNewSubtask(e.target.value)}
+                                              onKeyPress={(e) => {
+                                                if (e.key === 'Enter' && newSubtask.trim()) {
+                                                  handleAddSubtask(task.id, newSubtask.trim());
+                                                }
+                                              }}
+                                            />
+                                            <Button
+                                              size="small"
+                                              variant="outlined"
+                                              onClick={() => {
+                                                if (newSubtask.trim()) {
+                                                  handleAddSubtask(task.id, newSubtask.trim());
+                                                }
+                                              }}
+                                            >
+                                              הוסף
+                                            </Button>
+                                          </Box>
+                                        ) : (
+                                          <Button
+                                            size="small"
+                                            startIcon={<AddIcon />}
+                                            onClick={() => setEditingTaskId(task.id)}
+                                            sx={{ mt: task.subtasks?.length > 0 ? 1 : 0 }}
+                                          >
+                                            הוסף תת משימה
+                                          </Button>
+                                        )}
+                                      </Box>
+                                    </CardContent>
+                                  </Card>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </Box>
+                      )}
+                    </Droppable>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </DragDropContext>
+      )}
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           {selectedTask ? 'עריכת משימה' : 'משימה חדשה'}
@@ -752,7 +811,6 @@ const TaskList = () => {
         </DialogActions>
       </Dialog>
 
-      {/* דיאלוג אישור מחיקה */}
       <Dialog
         open={deleteConfirmOpen}
         onClose={() => setDeleteConfirmOpen(false)}

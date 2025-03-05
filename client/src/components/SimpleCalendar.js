@@ -15,140 +15,327 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField
+  TextField,
+  IconButton,
+  Popover,
+  Snackbar,
+  Alert
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { showNewTaskNotification } from '../services/notificationService';
 
 function SimpleCalendar() {
   const [events, setEvents] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
   const [newEvent, setNewEvent] = useState({
     title: '',
     start: '',
     end: '',
     type: 'אירוע'
   });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    action: null,
+    eventToDelete: null
+  });
 
   useEffect(() => {
+    const checkAndCreateTable = async () => {
+      try {
+        // בודק אם הטבלה קיימת
+        const { data, error } = await supabase
+          .from('department_events')
+          .select('*')
+          .limit(1);
+
+        console.log('Table check result:', { data, error });
+
+        if (error) {
+          console.error('Error checking table:', error);
+        }
+      } catch (err) {
+        console.error('Error in checkAndCreateTable:', err);
+      }
+    };
+
+    checkAndCreateTable();
     fetchEvents();
   }, []);
 
   const fetchEvents = async () => {
     try {
-      // מביא אירועי מחלקה
+      console.log('Fetching events...');
+      
+      // מביא אירועי מחלקה מהטבלה הייעודית
       const { data: departmentEvents, error: deptError } = await supabase
         .from('department_events')
         .select('*');
 
-      if (deptError) throw deptError;
+      if (deptError) {
+        console.error('Error fetching department events:', deptError);
+        throw deptError;
+      }
+
+      // מביא אירועי מחלקה מהטאב של אירועי מחלקה
+      const { data: departmentTab, error: tabError } = await supabase
+        .from('events')  
+        .select('*');
+
+      if (tabError) {
+        console.error('Error fetching department tab events:', tabError);
+        throw tabError;
+      }
 
       // מביא חופשות וחגים
       const { data: holidays, error: holidaysError } = await supabase
         .from('education_dates')
         .select('*');
 
-      if (holidaysError) throw holidaysError;
+      if (holidaysError) {
+        console.error('Error fetching holidays:', holidaysError);
+        throw holidaysError;
+      }
+
+      // מסדר את התאריכים כדי למנוע כפילויות
+      const uniqueHolidays = (holidays || []).reduce((acc, holiday) => {
+        const key = `${holiday.start_date}_${holiday.end_date}`;
+        if (!acc[key]) {
+          acc[key] = holiday;
+        }
+        return acc;
+      }, {});
 
       // ממפה את האירועים לפורמט של FullCalendar
       const formattedEvents = [
+        // אירועי מחלקה מהטבלה הייעודית
         ...(departmentEvents || []).map(event => ({
           id: `dept_${event.id}`,
           title: event.title,
           start: event.start_date,
-          end: event.end_date,
+          end: new Date(new Date(event.end_date).getTime() + (24 * 60 * 60 * 1000)).toISOString(), // מוסיף יום אחד לתאריך הסיום
           backgroundColor: '#1976d2',
           borderColor: '#1976d2',
           type: 'אירוע מחלקה',
-          allDay: true
+          allDay: true,
+          display: 'block'
         })),
-        ...(holidays || []).map(holiday => ({
+        // אירועי מחלקה מהטאב
+        ...(departmentTab || []).map(event => ({
+          id: `tab_${event.id}`,
+          title: event.title || event.name,
+          start: event.date || event.start_date,
+          end: event.end_date ? new Date(new Date(event.end_date).getTime() + (24 * 60 * 60 * 1000)).toISOString() : event.date, // מוסיף יום אחד לתאריך הסיום אם קיים
+          backgroundColor: '#9c27b0',
+          borderColor: '#9c27b0',
+          type: 'אירוע מחלקה מהטאב',
+          allDay: true,
+          display: 'block'
+        })),
+        // חופשות וחגים
+        ...Object.values(uniqueHolidays).map(holiday => ({
           id: `holiday_${holiday.id}`,
           title: holiday.title,
           start: holiday.start_date,
-          end: holiday.end_date,
+          end: new Date(new Date(holiday.end_date).getTime() + (24 * 60 * 60 * 1000)).toISOString(), // מוסיף יום אחד לתאריך הסיום
           backgroundColor: '#4caf50',
           borderColor: '#4caf50',
           type: 'חופשה',
-          allDay: true
+          allDay: true,
+          display: 'block'
         }))
       ];
 
+      console.log('All events:', formattedEvents);
       setEvents(formattedEvents);
     } catch (error) {
-      console.error('Error fetching events:', error);
+      console.error('Error in fetchEvents:', error);
     }
   };
 
   const handleDateClick = (arg) => {
+    const clickedDate = new Date(arg.dateStr);
+    const formattedDate = clickedDate.toISOString().split('T')[0];
+    
     setNewEvent({
       title: '',
-      start: arg.dateStr,
-      end: arg.dateStr,
+      start: formattedDate,
+      end: formattedDate,
+      type: 'אירוע'
+    });
+    setOpenDialog(true);
+  };
+
+  const handleDateSelect = (arg) => {
+    const start = arg.start.toISOString().split('T')[0];
+    const end = arg.end.toISOString().split('T')[0];
+
+    setNewEvent({
+      title: '',
+      start,
+      end,
       type: 'אירוע'
     });
     setOpenDialog(true);
   };
 
   const handleEventClick = (info) => {
-    // כאן אפשר להוסיף לוגיקה לצפייה/עריכה של אירוע קיים
+    if (info.event.id.startsWith('dept_') || info.event.id.startsWith('tab_')) {
+      setSelectedEvent(info.event);
+      setAnchorEl(info.el);
+    }
+  };
+
+  const handlePopoverClose = () => {
+    setAnchorEl(null);
+    setSelectedEvent(null);
+  };
+
+  const handleEdit = () => {
+    setNewEvent({
+      title: selectedEvent.title,
+      start: selectedEvent.start.toISOString().split('T')[0],
+      end: selectedEvent.end ? selectedEvent.end.toISOString().split('T')[0] : selectedEvent.start.toISOString().split('T')[0],
+      type: 'אירוע'
+    });
+    setEditMode(true);
+    setOpenDialog(true);
+    handlePopoverClose();
+  };
+
+  const handleDelete = () => {
+    setSnackbar({
+      open: true,
+      message: `האם למחוק את האירוע "${selectedEvent.title}"?`,
+      action: () => {
+        if (selectedEvent.id.startsWith('dept_')) {
+          const eventId = selectedEvent.id.replace('dept_', '');
+          deleteEvent('department_events', eventId);
+        } else if (selectedEvent.id.startsWith('tab_')) {
+          const eventId = selectedEvent.id.replace('tab_', '');
+          deleteEvent('events', eventId);
+        }
+      },
+      eventToDelete: selectedEvent
+    });
+    handlePopoverClose();
+  };
+
+  const deleteEvent = async (tableName, eventId) => {
+    try {
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('id', eventId);
+
+      if (error) {
+        console.error('Error deleting event:', error);
+        setSnackbar({
+          open: true,
+          message: 'לא הצלחנו למחוק את האירוע',
+          action: null,
+          eventToDelete: null
+        });
+        return;
+      }
+
+      // מסיר את האירוע מהמצב המקומי
+      const prefix = tableName === 'department_events' ? 'dept_' : 'tab_';
+      setEvents(prev => prev.filter(event => event.id !== `${prefix}${eventId}`));
+      
+      // מציג הודעת הצלחה
+      setSnackbar({
+        open: true,
+        message: 'האירוע נמחק בהצלחה',
+        action: null,
+        eventToDelete: null
+      });
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      setSnackbar({
+        open: true,
+        message: 'לא הצלחנו למחוק את האירוע',
+        action: null,
+        eventToDelete: null
+      });
+    }
   };
 
   const handleSaveEvent = async () => {
-    if (!newEvent.title || !newEvent.start) return;
+    if (!newEvent.title || !newEvent.start) {
+      alert('נא למלא כותרת ותאריך התחלה');
+      return;
+    }
 
     try {
-      // שומר את האירוע ב-Supabase
-      const { data, error } = await supabase
-        .from('department_events')
-        .insert([{
-          title: newEvent.title,
-          start_date: newEvent.start,
-          end_date: newEvent.end || newEvent.start
-        }])
-        .select();
+      const startDateTime = new Date(newEvent.start);
+      startDateTime.setHours(9, 0, 0);
+      
+      const endDateTime = new Date(newEvent.end || newEvent.start);
+      endDateTime.setHours(18, 0, 0);
 
-      if (error) throw error;
-
-      // מוסיף את האירוע החדש לרשימת האירועים המקומית
-      const newEventFormatted = {
-        id: `dept_${data[0].id}`,
+      const eventData = {
         title: newEvent.title,
-        start: newEvent.start,
-        end: newEvent.end || newEvent.start,
-        backgroundColor: '#1976d2',
-        borderColor: '#1976d2',
-        type: 'אירוע מחלקה',
-        allDay: true
+        start_date: startDateTime.toISOString(),
+        end_date: endDateTime.toISOString(),
+        description: '',
+        type: 'אירוע מחלקה'
       };
 
-      setEvents(prev => [...prev, newEventFormatted]);
-      showNewTaskNotification({
-        title: newEvent.title,
-        due_date: newEvent.start,
-        type: 'אירוע מחלקה'
-      });
-      
+      if (editMode && selectedEvent) {
+        // עדכון אירוע קיים
+        const tableName = selectedEvent.id.startsWith('dept_') ? 'department_events' : 'events';
+        const eventId = selectedEvent.id.startsWith('dept_') ? 
+          selectedEvent.id.replace('dept_', '') : 
+          selectedEvent.id.replace('tab_', '');
+
+        const { error } = await supabase
+          .from(tableName)
+          .update(eventData)
+          .eq('id', eventId);
+
+        if (error) {
+          console.error('Error updating event:', error);
+          alert('לא הצלחנו לעדכן את האירוע');
+          return;
+        }
+      } else {
+        // יצירת אירוע חדש
+        const { error } = await supabase
+          .from('department_events')
+          .insert([eventData]);
+
+        if (error) {
+          console.error('Error creating event:', error);
+          alert('לא הצלחנו ליצור את האירוע');
+          return;
+        }
+      }
+
       setOpenDialog(false);
+      setEditMode(false);
+      setSelectedEvent(null);
       setNewEvent({
         title: '',
         start: '',
         end: '',
         type: 'אירוע'
       });
-
-      // מרענן את הנתונים מהשרת
+      
+      // רענון האירועים
       fetchEvents();
     } catch (error) {
       console.error('Error saving event:', error);
+      alert('שגיאה בשמירת האירוע');
     }
   };
 
   return (
-    <Box sx={{ 
-      height: '100vh',
-      width: '100%',
-      p: 2
-    }}>
+    <Box sx={{ height: '100vh', width: '100%', p: 2 }}>
       <Paper elevation={3} sx={{ 
         height: '90vh',
         p: 2,
@@ -257,48 +444,16 @@ function SimpleCalendar() {
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
             initialView="dayGridMonth"
+            selectable={true}
+            select={handleDateSelect}
+            eventClick={handleEventClick}
             locale={heLocale}
             direction="rtl"
             headerToolbar={{
-              start: 'prev,next today',
+              start: 'today prev,next',
               center: 'title',
               end: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
             }}
-            views={{
-              dayGridMonth: {
-                titleFormat: { year: 'numeric', month: 'long' }
-              },
-              timeGridWeek: {
-                titleFormat: { year: 'numeric', month: 'long', day: '2-digit' },
-                slotMinTime: '07:00:00',
-                slotMaxTime: '20:00:00',
-                slotDuration: '00:30:00'
-              },
-              timeGridDay: {
-                titleFormat: { year: 'numeric', month: 'long', day: '2-digit' },
-                slotMinTime: '07:00:00',
-                slotMaxTime: '20:00:00',
-                slotDuration: '00:30:00'
-              },
-              listWeek: {
-                titleFormat: { year: 'numeric', month: 'long' },
-                noEventsContent: 'אין אירועים להצגה'
-              }
-            }}
-            events={events}
-            eventClick={handleEventClick}
-            dateClick={handleDateClick}
-            eventTimeFormat={{
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false
-            }}
-            dayMaxEvents={3}
-            eventDisplay="block"
-            expandRows={true}
-            height="100%"
-            allDaySlot={true}
-            allDayText="כל היום"
             buttonText={{
               today: 'היום',
               month: 'חודש',
@@ -306,17 +461,55 @@ function SimpleCalendar() {
               day: 'יום',
               list: 'רשימה'
             }}
+            height="100%"
+            events={events}
+            eventDisplay="block"
           />
         </Box>
       </Paper>
 
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={handlePopoverClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+      >
+        <Box sx={{ display: 'flex', p: 1 }}>
+          <IconButton onClick={handleEdit} size="small" sx={{ mr: 1 }}>
+            <EditIcon />
+          </IconButton>
+          <IconButton onClick={handleDelete} size="small">
+            <DeleteIcon />
+          </IconButton>
+        </Box>
+      </Popover>
+
       <Dialog 
         open={openDialog} 
-        onClose={() => setOpenDialog(false)}
+        onClose={() => {
+          setOpenDialog(false);
+          setEditMode(false);
+          setNewEvent({
+            title: '',
+            start: '',
+            end: '',
+            type: 'אירוע'
+          });
+        }}
         maxWidth="sm"
         fullWidth
+        dir="rtl"
       >
-        <DialogTitle>הוספת אירוע חדש</DialogTitle>
+        <DialogTitle>
+          {editMode ? 'עריכת אירוע' : 'הוספת אירוע חדש'}
+        </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -326,7 +519,16 @@ function SimpleCalendar() {
             fullWidth
             value={newEvent.title}
             onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 2,
+              '& .MuiInputBase-input': {
+                textAlign: 'right',
+                direction: 'rtl'
+              }
+            }}
+            InputProps={{
+              dir: 'rtl'
+            }}
           />
           <TextField
             margin="dense"
@@ -349,12 +551,57 @@ function SimpleCalendar() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>ביטול</Button>
+          <Button onClick={() => {
+            setOpenDialog(false);
+            setEditMode(false);
+            setNewEvent({
+              title: '',
+              start: '',
+              end: '',
+              type: 'אירוע'
+            });
+          }}>ביטול</Button>
           <Button onClick={handleSaveEvent} variant="contained" color="primary">
             שמור
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={snackbar.action ? null : 3000}
+        onClose={() => setSnackbar({ open: false, message: '', action: null, eventToDelete: null })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={snackbar.action ? "warning" : "success"}
+          action={
+            snackbar.action ? (
+              <>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    snackbar.action();
+                    setSnackbar({ open: false, message: '', action: null, eventToDelete: null });
+                  }}
+                >
+                  כן
+                </Button>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => setSnackbar({ open: false, message: '', action: null, eventToDelete: null })}
+                >
+                  לא
+                </Button>
+              </>
+            ) : null
+          }
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

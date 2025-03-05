@@ -3,25 +3,26 @@ import {
   Box,
   Container,
   CssBaseline,
-  Tabs,
   Tab,
+  Tabs,
+  Typography,
   ThemeProvider,
-  useMediaQuery
+  useMediaQuery,
+  Button
 } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
 import TaskList from './components/TaskList';
-import InventoryList from './components/InventoryList';
-import EquipmentTracker from './components/EquipmentTracker';
 import SimpleCalendar from './components/SimpleCalendar';
 import DepartmentEvents from './components/DepartmentEvents';
 import EducationDates from './components/EducationDates';
+import FormsLibrary from './components/FormsLibrary';
+import InventoryList from './components/InventoryList';
+import EquipmentTracker from './components/EquipmentTracker';
+import Login from './components/Login';
 import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import { prefixer } from 'stylis';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import { checkUpcomingItems, requestNotificationPermission } from './services/notificationService';
 import { supabase } from './supabaseClient';
 
 // Create rtl cache
@@ -30,28 +31,33 @@ const cacheRtl = createCache({
   stylisPlugins: [prefixer, rtlPlugin],
 });
 
+// Create theme instance
 const theme = createTheme({
   direction: 'rtl',
   typography: {
     fontFamily: 'Assistant, Arial, sans-serif',
   },
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    background: {
-      default: '#f5f5f5',
+  components: {
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          direction: 'rtl',
+        },
+      },
     },
   },
 });
 
-function TabPanel({ children, value, index }) {
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
   return (
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
     >
       {value === index && (
         <Box sx={{ p: 3 }}>
@@ -62,204 +68,202 @@ function TabPanel({ children, value, index }) {
   );
 }
 
+function a11yProps(index) {
+  return {
+    id: `simple-tab-${index}`,
+    'aria-controls': `simple-tabpanel-${index}`,
+  };
+}
+
 function App() {
   const [currentTab, setCurrentTab] = useState(0);
   const [tasks, setTasks] = useState([]);
-  const [departmentEvents, setDepartmentEvents] = useState([]);
+  const [user, setUser] = useState(null);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
-    // בקשת אישור להתראות
-    const setupNotifications = async () => {
-      const hasPermission = await requestNotificationPermission();
-      if (hasPermission) {
-        console.log('אישור להתראות התקבל');
-      }
+    // בדיקת משתמש מחובר
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      setUser(data.session?.user ?? null);
     };
+    checkUser();
 
-    setupNotifications();
+    // האזנה לשינויים במצב ההתחברות
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    // טעינת משימות ואירועים
     const fetchData = async () => {
+      if (!user) return;
+      
       try {
-        // טעינת משימות
         const { data: tasksData, error: tasksError } = await supabase
           .from('tasks')
           .select('*');
         
         if (tasksError) throw tasksError;
         setTasks(tasksData || []);
-
-        // טעינת אירועים
-        const { data: eventsData, error: eventsError } = await supabase
-          .from('department_events')
-          .select('*');
-        
-        if (eventsError) throw eventsError;
-        setDepartmentEvents(eventsData || []);
-
-        // בדיקה מיידית של אירועים ומשימות קרובים
-        setTimeout(() => {
-          checkUpcomingItems(tasksData || [], eventsData || []);
-        }, 2000); // מחכים 2 שניות כדי לתת לממשק להיטען קודם
       } catch (error) {
         console.error('Error fetching data:', error);
       }
     };
 
     fetchData();
-  }, []);
+  }, [user]);
 
-  useEffect(() => {
-    // בדיקת משימות ואירועים קרובים בכל בוקר בשעה 8:00
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(8, 0, 0, 0);
+  const handleLogin = (user) => {
+    setUser(user);
+  };
 
-    const timeUntilCheck = tomorrow - now;
-    
-    const checkNotifications = () => {
-      const currentHour = new Date().getHours();
-      if (currentHour === 8) {
-        checkUpcomingItems(tasks, departmentEvents);
-      }
-    };
-
-    // הפעלה ראשונית
-    const initialTimeout = setTimeout(() => {
-      checkNotifications();
-      // הפעלה כל 24 שעות
-      setInterval(checkNotifications, 24 * 60 * 60 * 1000);
-    }, timeUntilCheck);
-
-    return () => {
-      clearTimeout(initialTimeout);
-    };
-  }, [tasks, departmentEvents]);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
 
+  if (!user) {
+    return (
+      <CacheProvider value={cacheRtl}>
+        <ThemeProvider theme={theme}>
+          <Login onLogin={handleLogin} />
+        </ThemeProvider>
+      </CacheProvider>
+    );
+  }
+
   return (
     <CacheProvider value={cacheRtl}>
       <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box sx={{ 
+        <Box sx={{
           minHeight: '100vh',
           backgroundColor: '#f5f5f5'
         }}>
-          <Container maxWidth={false}>
+          <Container maxWidth="lg">
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              width: '100%',
+              mb: 2,
+              mt: 1,
+              px: 2
+            }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={() => handleLogout()}
+                sx={{
+                  minWidth: 'auto',
+                  px: 2
+                }}
+              >
+                התנתק
+              </Button>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 1
+              }}>
+                <img 
+                  src="/images/logo.png" 
+                  alt="לוגו מתנס" 
+                  style={{ 
+                    height: '100px',
+                    width: 'auto',
+                    margin: '15px 0'
+                  }} 
+                />
+              </Box>
+              <Box sx={{ minWidth: '64px' }} /> {/* שומר על איזון */}
+            </Box>
+
             <Box sx={{ 
               display: 'flex',
               flexDirection: 'column',
-              flex: 1,
-              p: isMobile ? 1 : 2
+              gap: 3
             }}>
-              {/* לוגו */}
-              <Box 
-                sx={{ 
-                  display: 'flex',
-                  justifyContent: 'center',
-                  mb: 2,
-                  mt: 1,
-                  '& img': {
-                    maxWidth: isMobile ? '80%' : '300px',
-                    height: 'auto'
-                  }
-                }}
-              >
-                <img src="/logo.png" alt="לוגו המתנ״ס" />
-              </Box>
-
-              <Box sx={{ 
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                bgcolor: 'white',
+              <Box sx={{
+                width: '100%',
+                bgcolor: 'background.paper',
                 borderRadius: 1,
-                overflow: 'hidden',
-                flex: 1,
-                mt: 1
+                boxShadow: 1,
+                display: 'flex',
+                justifyContent: 'center'
               }}>
                 <Tabs
-                  orientation={isMobile ? "horizontal" : "vertical"}
+                  orientation="horizontal"
                   variant="scrollable"
+                  scrollButtons="auto"
+                  allowScrollButtonsMobile
                   value={currentTab}
                   onChange={handleTabChange}
                   sx={{
-                    borderRight: isMobile ? 0 : 1,
-                    borderBottom: isMobile ? 1 : 0,
+                    borderBottom: 1,
                     borderColor: 'divider',
-                    minHeight: isMobile ? 'auto' : undefined,
+                    maxWidth: 'md',
                     '& .MuiTab-root': {
-                      minWidth: isMobile ? 'auto' : 130,
-                      fontSize: isMobile ? '0.9rem' : '1rem',
-                      py: isMobile ? 1 : 2
+                      fontSize: '1rem',
+                      py: 2,
+                      px: 3,
+                      minHeight: '48px',
+                      color: 'text.secondary',
+                      '&.Mui-selected': {
+                        color: 'primary.main',
+                        fontWeight: 'medium'
+                      }
+                    },
+                    '& .MuiTabs-indicator': {
+                      backgroundColor: 'primary.main'
+                    },
+                    '& .MuiTabs-flexContainer': {
+                      justifyContent: 'center'
                     }
                   }}
                 >
-                  <Tab label="משימות" />
-                  <Tab label="מלאי והזמנות" />
-                  <Tab label="מעקב ציוד" />
-                  <Tab label="לוח שנה" />
-                  <Tab label="אירועי מחלקה" />
-                  <Tab label="חופשות וחגים" />
+                  <Tab label="משימות" {...a11yProps(0)} />
+                  <Tab label="יומן" {...a11yProps(1)} />
+                  <Tab label="אירועי מחלקה" {...a11yProps(2)} />
+                  <Tab label="חופשות וחגים" {...a11yProps(3)} />
+                  <Tab label="אישורים וטפסים" {...a11yProps(4)} />
+                  <Tab label="מלאי והזמנות" {...a11yProps(5)} />
+                  <Tab label="מעקב ציוד" {...a11yProps(6)} />
                 </Tabs>
-                <Box sx={{ 
-                  flex: 1,
-                  overflow: 'auto',
-                  height: isMobile ? 'calc(100vh - 120px)' : 'auto'
-                }}>
-                  <TabPanel value={currentTab} index={0}>
-                    <TaskList />
-                  </TabPanel>
-                  <TabPanel value={currentTab} index={1}>
-                    <InventoryList />
-                  </TabPanel>
-                  <TabPanel value={currentTab} index={2}>
-                    <EquipmentTracker />
-                  </TabPanel>
-                  <TabPanel value={currentTab} index={3}>
-                    <SimpleCalendar />
-                  </TabPanel>
-                  <TabPanel value={currentTab} index={4}>
-                    <DepartmentEvents />
-                  </TabPanel>
-                  <TabPanel value={currentTab} index={5}>
-                    <EducationDates />
-                  </TabPanel>
-                </Box>
+              </Box>
+
+              <Box sx={{ flex: 1 }}>
+                <TabPanel value={currentTab} index={0}>
+                  <TaskList tasks={tasks} />
+                </TabPanel>
+                <TabPanel value={currentTab} index={1}>
+                  <SimpleCalendar />
+                </TabPanel>
+                <TabPanel value={currentTab} index={2}>
+                  <DepartmentEvents />
+                </TabPanel>
+                <TabPanel value={currentTab} index={3}>
+                  <EducationDates />
+                </TabPanel>
+                <TabPanel value={currentTab} index={4}>
+                  <FormsLibrary />
+                </TabPanel>
+                <TabPanel value={currentTab} index={5}>
+                  <InventoryList />
+                </TabPanel>
+                <TabPanel value={currentTab} index={6}>
+                  <EquipmentTracker />
+                </TabPanel>
               </Box>
             </Box>
           </Container>
-          <ToastContainer
-            position="top-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop
-            closeOnClick
-            rtl
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="light"
-            style={{
-              zIndex: 9999,
-              fontSize: '1rem',
-              fontFamily: 'Rubik, sans-serif'
-            }}
-            toastStyle={{
-              backgroundColor: '#fff',
-              color: '#333',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              padding: '16px',
-              minHeight: '64px'
-            }}
-          />
         </Box>
       </ThemeProvider>
     </CacheProvider>
