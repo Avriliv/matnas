@@ -50,7 +50,8 @@ function EquipmentTracker() {
     staff_member: '',
     borrower_name: '',
     notes: '',
-    signature: null
+    signature: null,
+    items: []  // מערך של פריטים
   });
   const [errors, setErrors] = useState({});
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
@@ -89,13 +90,45 @@ function EquipmentTracker() {
     setAlert({ ...alert, open: false });
   };
 
+  const handleAddItem = () => {
+    setNewItem(prev => ({
+      ...prev,
+      items: [...prev.items, { item_name: '', quantity: 1 }]
+    }));
+  };
+
+  const handleRemoveItem = (index) => {
+    setNewItem(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleItemChange = (index, field, value) => {
+    setNewItem(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
+      )
+    }));
+  };
+
   const validateForm = () => {
     const errors = {};
-    if (!newItem.item_name?.trim()) errors.item_name = 'נדרש למלא שם פריט';
-    if (!newItem.quantity || newItem.quantity < 1) errors.quantity = 'נדרש להזין כמות חוקית';
     if (!newItem.staff_member) errors.staff_member = 'נדרש לבחור איש צוות';
     if (!newItem.borrower_name?.trim()) errors.borrower_name = 'נדרש למלא שם שואל';
     if (!newItem.checkout_date) errors.checkout_date = 'נדרש למלא תאריך משיכה';
+    if (newItem.items.length === 0) errors.items = 'נדרש להוסיף לפחות פריט אחד';
+    
+    // בדיקת תקינות לכל פריט
+    newItem.items.forEach((item, index) => {
+      if (!item.item_name?.trim()) {
+        errors[`item_${index}_name`] = 'נדרש למלא שם פריט';
+      }
+      if (!item.quantity || item.quantity < 1) {
+        errors[`item_${index}_quantity`] = 'נדרש להזין כמות חוקית';
+      }
+    });
     
     setErrors(errors);
     return Object.keys(errors).length === 0;
@@ -108,69 +141,45 @@ function EquipmentTracker() {
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('לא נמצא משתמש מחובר');
+      }
+
       let signature = null;
       if (signatureRef.current && !signatureRef.current.isEmpty()) {
         signature = signatureRef.current.toDataURL();
       }
 
-      // Create base item data
-      const itemData = {
-        item_name: newItem.item_name.trim(),
+      // יצירת רשומות עבור כל פריט
+      const itemsToInsert = newItem.items.map(item => ({
+        item_name: item.item_name.trim(),
+        quantity: parseInt(item.quantity) || 1,
         checkout_date: newItem.checkout_date,
         staff_member: newItem.staff_member,
         borrower_name: newItem.borrower_name.trim(),
         notes: newItem.notes?.trim() || '',
-        signature: signature
-      };
+        signature: signature,
+        user_id: user.id
+      }));
 
-      // Add quantity only if the column exists
-      try {
-        const { data: columns } = await supabase
-          .from('equipment_tracking')
-          .select()
-          .limit(1);
-        
-        if (columns && columns[0] && 'quantity' in columns[0]) {
-          itemData.quantity = parseInt(newItem.quantity) || 1;
-        }
-      } catch (e) {
-        console.warn('Could not verify quantity column:', e);
-      }
-
-      let error;
-      if (newItem.id) {
-        const { error: updateError } = await supabase
-          .from('equipment_tracking')
-          .update(itemData)
-          .eq('id', newItem.id);
-        error = updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('equipment_tracking')
-          .insert([itemData]);
-        error = insertError;
-      }
+      const { error } = await supabase
+        .from('equipment_tracking')
+        .insert(itemsToInsert);
 
       if (error) {
         console.error('Supabase error:', error);
-        setAlert({ open: true, message: 'שגיאה בשמירת הפריט: ' + error.message, severity: 'error' });
+        setAlert({ open: true, message: 'שגיאה בשמירת הפריטים: ' + error.message, severity: 'error' });
         throw error;
       }
 
-      setAlert({ open: true, message: newItem.id ? 'הפריט עודכן בהצלחה' : 'הפריט נוסף בהצלחה', severity: 'success' });
+      setAlert({ open: true, message: 'הפריטים נוספו בהצלחה', severity: 'success' });
       handleCloseDialog();
       fetchEquipment();
     } catch (error) {
       console.error('Error saving equipment:', error);
-      setAlert({ open: true, message: 'שגיאה בשמירת הפריט: ' + (error.message || error), severity: 'error' });
-    }
-  };
-
-  const handleOpenDialog = () => {
-    setOpenDialog(true);
-    setErrors({});
-    if (signatureRef.current) {
-      signatureRef.current.clear();
+      setAlert({ open: true, message: 'שגיאה בשמירת הפריטים: ' + (error.message || error), severity: 'error' });
     }
   };
 
@@ -183,8 +192,17 @@ function EquipmentTracker() {
       staff_member: '',
       borrower_name: '',
       notes: '',
-      signature: null
+      signature: null,
+      items: []
     });
+  };
+
+  const handleOpenDialog = () => {
+    setOpenDialog(true);
+    setErrors({});
+    if (signatureRef.current) {
+      signatureRef.current.clear();
+    }
   };
 
   const handleEditItem = (item) => {
@@ -302,18 +320,7 @@ function EquipmentTracker() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => {
-              setNewItem({
-                item_name: '',
-                quantity: 1,
-                checkout_date: new Date().toISOString().split('T')[0],
-                staff_member: '',
-                borrower_name: '',
-                notes: '',
-                signature: null
-              });
-              setOpenDialog(true);
-            }}
+            onClick={handleOpenDialog}
           >
             הוסף פריט חדש
           </Button>
@@ -390,24 +397,35 @@ function EquipmentTracker() {
         <DialogTitle>{newItem.id ? 'ערוך פריט' : 'הוסף פריט חדש'}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel id="staff-member-label">איש צוות</InputLabel>
+              <Select
+                labelId="staff-member-label"
+                value={newItem.staff_member}
+                onChange={(e) => setNewItem({ ...newItem, staff_member: e.target.value })}
+                error={!!errors.staff_member}
+              >
+                {staffMembers.map((member) => (
+                  <MenuItem key={member} value={member}>{member}</MenuItem>
+                ))}
+              </Select>
+              {errors.staff_member && (
+                <Typography color="error" variant="caption">
+                  {errors.staff_member}
+                </Typography>
+              )}
+            </FormControl>
+
             <TextField
-              label="שם הפריט"
-              value={newItem.item_name}
-              onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-              error={!!errors.item_name}
-              helperText={errors.item_name}
+              label="שם השואל"
+              value={newItem.borrower_name}
+              onChange={(e) => setNewItem({ ...newItem, borrower_name: e.target.value })}
+              error={!!errors.borrower_name}
+              helperText={errors.borrower_name}
               required
+              fullWidth
             />
-            <TextField
-              label="כמות"
-              type="number"
-              value={newItem.quantity}
-              onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 0 })}
-              error={!!errors.quantity}
-              helperText={errors.quantity}
-              required
-              InputProps={{ inputProps: { min: 1 } }}
-            />
+
             <TextField
               label="תאריך משיכה"
               type="date"
@@ -416,48 +434,84 @@ function EquipmentTracker() {
               error={!!errors.checkout_date}
               helperText={errors.checkout_date}
               required
+              fullWidth
+              InputLabelProps={{ shrink: true }}
             />
-            <FormControl error={!!errors.staff_member} required>
-              <InputLabel>איש צוות</InputLabel>
-              <Select
-                value={newItem.staff_member}
-                onChange={(e) => setNewItem({ ...newItem, staff_member: e.target.value })}
-                label="איש צוות"
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="h6" component="div" sx={{ mb: 1 }}>
+                פריטים
+              </Typography>
+              {newItem.items.map((item, index) => (
+                <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'flex-start' }}>
+                  <TextField
+                    label="שם הפריט"
+                    value={item.item_name}
+                    onChange={(e) => handleItemChange(index, 'item_name', e.target.value)}
+                    error={!!errors[`item_${index}_name`]}
+                    helperText={errors[`item_${index}_name`]}
+                    required
+                    fullWidth
+                  />
+                  <TextField
+                    label="כמות"
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                    error={!!errors[`item_${index}_quantity`]}
+                    helperText={errors[`item_${index}_quantity`]}
+                    required
+                    sx={{ width: '100px' }}
+                  />
+                  <IconButton 
+                    onClick={() => handleRemoveItem(index)}
+                    color="error"
+                    sx={{ mt: 1 }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              ))}
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddItem}
+                sx={{ mt: 1 }}
               >
-                {staffMembers.map((member) => (
-                  <MenuItem key={member} value={member}>
-                    {member}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="שם השואל"
-              value={newItem.borrower_name}
-              onChange={(e) => setNewItem({ ...newItem, borrower_name: e.target.value })}
-              error={!!errors.borrower_name}
-              helperText={errors.borrower_name}
-              required
-            />
+                הוסף פריט
+              </Button>
+              {errors.items && (
+                <Typography color="error" variant="caption" display="block" sx={{ mt: 1 }}>
+                  {errors.items}
+                </Typography>
+              )}
+            </Box>
+
             <TextField
               label="הערות"
               value={newItem.notes}
               onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
               multiline
-              rows={3}
+              rows={2}
+              fullWidth
             />
-            <Box sx={{ border: '1px solid #ccc', p: 1 }}>
-              <Typography variant="subtitle2" gutterBottom>
+
+            <Box sx={{ border: '1px solid #ccc', p: 2, borderRadius: 1 }}>
+              <Typography variant="subtitle1" gutterBottom>
                 חתימה
               </Typography>
               <SignaturePad
                 ref={signatureRef}
                 canvasProps={{
                   className: 'signature-canvas',
-                  style: { width: '100%', height: '150px' }
+                  style: { width: '100%', height: '150px', border: '1px solid #ccc' }
                 }}
               />
-              <Button size="small" onClick={() => signatureRef.current?.clear()}>
+              <Button
+                size="small"
+                onClick={() => signatureRef.current?.clear()}
+                sx={{ mt: 1 }}
+              >
                 נקה חתימה
               </Button>
             </Box>
