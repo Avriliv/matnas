@@ -23,29 +23,14 @@ function EducationDates() {
     const holidays = [
       {
         id: 1,
-        title: 'חופשת קיץ',
-        start_date: '2024-07-01',
-        end_date: '2024-08-31',
-        return_date: '2024-09-01',
-        type: 'חופשה'
-      },
-      {
-        id: 2,
-        title: 'היערכות והכנה לשנת הלימודים',
-        start_date: '2024-09-01',
-        end_date: '2024-09-01',
-        type: 'אחר'
-      },
-      {
-        id: 3,
         title: 'ראש השנה',
         start_date: '2024-10-02',
         end_date: '2024-10-04',
-        return_date: '2024-10-05',
+        return_date: '2024-10-06',
         type: 'חג'
       },
       {
-        id: 4,
+        id: 2,
         title: 'יום כיפור',
         start_date: '2024-10-11',
         end_date: '2024-10-12',
@@ -53,117 +38,73 @@ function EducationDates() {
         type: 'חג'
       },
       {
-        id: 5,
-        title: 'סוכות',
-        start_date: '2024-10-16',
-        end_date: '2024-10-18',
-        return_date: '2024-10-19',
-        type: 'חג'
-      },
-      {
-        id: 6,
+        id: 3,
         title: 'חופשת סוכות',
-        start_date: '2024-10-19',
-        end_date: '2024-10-25',
-        return_date: '2024-10-26',
+        start_date: '2024-10-13',
+        end_date: '2024-10-24',
+        return_date: '2024-10-25',
         type: 'חופשה'
       },
       {
-        id: 7,
+        id: 4,
         title: 'חנוכה',
-        start_date: '2024-12-25',
+        start_date: '2024-12-27',
         end_date: '2025-01-02',
         return_date: '2025-01-03',
         type: 'חג'
       },
       {
-        id: 8,
-        title: 'ט"ו בשבט',
-        start_date: '2025-01-25',
-        end_date: '2025-01-25',
-        type: 'חג'
-      },
-      {
-        id: 9,
-        title: 'תענית אסתר',
-        start_date: '2025-03-13',
-        end_date: '2025-03-13',
-        type: 'חג'
-      },
-      {
-        id: 10,
+        id: 5,
         title: 'פורים',
         start_date: '2025-03-14',
-        end_date: '2025-03-14',
-        return_date: '2025-03-15',
+        end_date: '2025-03-16',
+        return_date: '2025-03-17',
         type: 'חג'
       },
       {
-        id: 11,
-        title: 'שושן פורים',
-        start_date: '2025-03-15',
-        end_date: '2025-03-15',
-        type: 'חג'
-      },
-      {
-        id: 12,
+        id: 6,
         title: 'חופשת פסח',
-        start_date: '2025-04-12',
+        start_date: '2025-04-04',
         end_date: '2025-04-19',
         return_date: '2025-04-20',
         type: 'חופשה'
       },
       {
-        id: 13,
-        title: 'יום הזיכרון לשואה ולגבורה',
-        start_date: '2025-04-28',
-        end_date: '2025-04-28',
-        type: 'אחר'
-      },
-      {
-        id: 14,
-        title: 'יום הזיכרון לחללי מערכות ישראל',
+        id: 7,
+        title: 'יום העצמאות',
         start_date: '2025-05-01',
         end_date: '2025-05-01',
-        type: 'אחר'
-      },
-      {
-        id: 15,
-        title: 'יום העצמאות',
-        start_date: '2025-05-02',
-        end_date: '2025-05-02',
-        return_date: '2025-05-03',
+        return_date: '2025-05-02',
         type: 'חג'
       },
       {
-        id: 16,
-        title: "ל''ג בעומר",
-        start_date: '2025-05-18',
-        end_date: '2025-05-18',
-        type: 'חג'
-      },
-      {
-        id: 17,
-        title: 'יום ירושלים',
-        start_date: '2025-05-28',
-        end_date: '2025-05-28',
-        type: 'אחר'
-      },
-      {
-        id: 18,
+        id: 8,
         title: 'שבועות',
         start_date: '2025-06-01',
-        end_date: '2025-06-01',
-        return_date: '2025-06-02',
+        end_date: '2025-06-02',
+        return_date: '2025-06-03',
         type: 'חג'
       },
       {
-        id: 19,
-        title: 'סיום שנת הלימודים',
+        id: 9,
+        title: 'סיום שנת הלימודים - חטיבות ביניים ובתי ספר על-יסודיים (5 ימי לימוד)',
+        start_date: '2025-06-19',
+        end_date: '2025-06-19',
+        type: 'סיום לימודים'
+      },
+      {
+        id: 10,
+        title: 'סיום שנת הלימודים - חטיבות ביניים ובתי ספר על-יסודיים (6 ימי לימוד)',
         start_date: '2025-06-20',
-        end_date: '2025-08-31',
-        return_date: '2025-09-01',
-        type: 'חופשה'
+        end_date: '2025-06-20',
+        type: 'סיום לימודים'
+      },
+      {
+        id: 11,
+        title: 'סיום שנת הלימודים - גני ילדים ובתי ספר יסודיים',
+        start_date: '2025-06-30',
+        end_date: '2025-06-30',
+        type: 'סיום לימודים'
       }
     ];
     setHolidays(holidays);
