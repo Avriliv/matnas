@@ -111,7 +111,8 @@ function InventoryList() {
         (payload) => {
           console.log('שינוי במלאי התקבל:', payload);
           loadInventoryItems(); // טעינה מחדש של המלאי
-      })
+        }
+      )
       .subscribe();
 
     // ניקוי המאזין כשהקומפוננטה מתפרקת
