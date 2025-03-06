@@ -96,9 +96,25 @@ const TaskList = ({ tasks: initialTasks }) => {
         setLoading(true);
         setError(null);
         
+        // קבלת המשתמש הנוכחי
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error('לא נמצא משתמש מחובר');
+        }
+
+        // קבלת הפרופיל של המשתמש עם ההרשאות
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('can_view_tasks_from')
+          .eq('id', user.id)
+          .single();
+
+        // מביאים את המשימות של המשתמש עצמו ושל המשתמשים שהוא יכול לראות
         const { data, error } = await supabase
           .from('tasks')
           .select('*')
+          .or(`user_id.eq.${user.id}${userProfile?.can_view_tasks_from?.length ? `,user_id.in.(${userProfile.can_view_tasks_from.join(',')})` : ''}`)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -150,9 +166,8 @@ const TaskList = ({ tasks: initialTasks }) => {
         .update({ status: newStatus })
         .eq('id', taskId);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
+
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס משימה:', error);
       // במקרה של שגיאה, מחזירים את המצב הקודם
@@ -914,7 +929,7 @@ const TaskList = ({ tasks: initialTasks }) => {
                   label="תאריך להתראה"
                   value={newNotification.notify_date}
                   onChange={(date) => setNewNotification({ ...newNotification, notify_date: date })}
-                  slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
+                  renderInput={(params) => <TextField {...params} fullWidth sx={{ mb: 2 }} />}
                 />
               </LocalizationProvider>
             )}

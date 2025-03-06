@@ -46,6 +46,8 @@ function InventoryList() {
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const [newItem, setNewItem] = useState({
     title: '',
@@ -63,7 +65,43 @@ function InventoryList() {
   });
 
   useEffect(() => {
-    fetchInventory();
+    const loadInventoryItems = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // קבלת המשתמש הנוכחי
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error('לא נמצא משתמש מחובר');
+        }
+
+        // קבלת הפרופיל של המשתמש עם ההרשאות
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('can_view_tasks_from')
+          .eq('id', user.id)
+          .single();
+
+        // מביאים את הפריטים של המשתמש עצמו ושל המשתמשים שהוא יכול לראות
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('*')
+          .or(`user_id.eq.${user.id}${userProfile?.can_view_tasks_from?.length ? `,user_id.in.(${userProfile.can_view_tasks_from.join(',')})` : ''}`)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setInventory(data || []);
+      } catch (error) {
+        console.error('Error loading inventory items:', error);
+        setError(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInventoryItems();
 
     // הגדרת מאזין לשינויים בזמן אמת
     const subscription = supabase
@@ -76,8 +114,9 @@ function InventoryList() {
         }, 
         (payload) => {
           console.log('שינוי במלאי התקבל:', payload);
-          fetchInventory(); // טעינה מחדש של המלאי
-      })
+          loadInventoryItems(); // טעינה מחדש של המלאי
+        }
+      )
       .subscribe();
 
     // ניקוי המאזין כשהקומפוננטה מתפרקת
@@ -189,7 +228,7 @@ function InventoryList() {
         return;
       }
 
-      showAlert('הפריטים נוספו בהצלחה');
+      showAlert(selectedItem ? 'פריט עודכן בהצלחה' : 'פריט נוסף בהצלחה');
       fetchInventory();
       handleCloseDialog();
     } catch (error) {
@@ -348,342 +387,255 @@ function InventoryList() {
 
   return (
     <Box sx={{ width: '100%', p: 2 }}>
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <Typography variant="h5" component="h2">
-          מלאי והזמנות
+      {loading ? (
+        <Typography variant="h6" component="p">
+          טוען מלאי...
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          הוסף פריטים
-        </Button>
-        <ExportButtons
-          data={inventory}
-          filename="רשימת_מלאי"
-          columns={exportColumns}
-        />
-      </Stack>
-      <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5">רשימת מלאי</Typography>
-          <Box>
-            <Button
-              variant="outlined"
-              startIcon={<FileDownloadIcon />}
-              onClick={handleExportClick}
-              sx={{ ml: 1 }}
-            >
-              ייצא
-            </Button>
-          </Box>
-        </Box>
-
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>שם הפריט</TableCell>
-                <TableCell>כמות</TableCell>
-                <TableCell>ספק</TableCell>
-                <TableCell>מחיר</TableCell>
-                <TableCell>כולל מע״מ</TableCell>
-                <TableCell>הצעת מחיר</TableCell>
-                <TableCell>קישור למוצר</TableCell>
-                <TableCell>הערות</TableCell>
-                <TableCell>פעולות</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {inventory.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.item_name}</TableCell>
-                  <TableCell>{item.quantity}</TableCell>
-                  <TableCell>{item.supplier}</TableCell>
-                  <TableCell>{calculatePriceWithVat(item.price, item.include_vat)}</TableCell>
-                  <TableCell>{item.include_vat ? 'כן' : 'לא'}</TableCell>
-                  <TableCell>
-                    {item.quote_file_url ? (
-                      <Link href={item.quote_file_url} target="_blank" rel="noopener noreferrer">
-                        צפה בהצעת מחיר
-                      </Link>
-                    ) : (
-                      <>
-                        <input
-                          type="file"
-                          onChange={(e) => handleFileUpload(e, item.id)}
-                          style={{ display: 'none' }}
-                          id={`quote-upload-${item.id}`}
-                        />
-                        <label htmlFor={`quote-upload-${item.id}`}>
-                          <Button component="span" size="small">
-                            העלה
-                          </Button>
-                        </label>
-                      </>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {item.product_url && (
-                      <Link href={item.product_url} target="_blank" rel="noopener noreferrer">
-                        קישור
-                      </Link>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" component="span">
-                      {item.notes}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleOpenDialog(item)} size="small">
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleDeleteClick(item.id)} size="small">
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <Menu
-          anchorEl={exportAnchorEl}
-          open={Boolean(exportAnchorEl)}
-          onClose={handleExportClose}
-        >
-          <MenuItem onClick={exportToExcel}>
-            ייצא ל-Excel
-          </MenuItem>
-          <MenuItem onClick={handleEmailExport}>
-            שלח במייל
-          </MenuItem>
-        </Menu>
-
-        <Dialog
-          open={deleteConfirmOpen}
-          onClose={() => setDeleteConfirmOpen(false)}
-          maxWidth="xs"
-          dir="rtl"
-        >
-          <DialogTitle sx={{ textAlign: 'center' }}>
-            האם למחוק את הפריט?
-          </DialogTitle>
-          <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+      ) : error ? (
+        <Typography variant="h6" component="p" color="error">
+          {error}
+        </Typography>
+      ) : (
+        <>
+          <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+            <Typography variant="h5" component="h2">
+              מלאי והזמנות
+            </Typography>
             <Button
               variant="contained"
-              color="error"
-              onClick={handleDeleteConfirm}
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
             >
-              כן, למחוק
+              הוסף פריט
             </Button>
-            <Button
-              variant="outlined"
-              onClick={() => setDeleteConfirmOpen(false)}
+            <ExportButtons
+              data={inventory}
+              filename="רשימת_מלאי"
+              columns={exportColumns}
+            />
+          </Stack>
+          <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5">רשימת מלאי</Typography>
+              <Box>
+                <Button
+                  variant="outlined"
+                  startIcon={<FileDownloadIcon />}
+                  onClick={handleExportClick}
+                  sx={{ ml: 1 }}
+                >
+                  ייצא
+                </Button>
+              </Box>
+            </Box>
+
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>שם הפריט</TableCell>
+                    <TableCell>כמות</TableCell>
+                    <TableCell>ספק</TableCell>
+                    <TableCell>מחיר</TableCell>
+                    <TableCell>כולל מע״ם</TableCell>
+                    <TableCell>הצעת מחיר</TableCell>
+                    <TableCell>קישור למוצר</TableCell>
+                    <TableCell>הערות</TableCell>
+                    <TableCell>פעולות</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {inventory.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.item_name}</TableCell>
+                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>{item.supplier}</TableCell>
+                      <TableCell>{calculatePriceWithVat(item.price, item.include_vat)}</TableCell>
+                      <TableCell>{item.include_vat ? 'כן' : 'לא'}</TableCell>
+                      <TableCell>
+                        {item.quote_file_url ? (
+                          <Link href={item.quote_file_url} target="_blank" rel="noopener noreferrer">
+                            צפה בהצעת מחיר
+                          </Link>
+                        ) : (
+                          <>
+                            <input
+                              type="file"
+                              onChange={(e) => handleFileUpload(e, item.id)}
+                              style={{ display: 'none' }}
+                              id={`quote-upload-${item.id}`}
+                            />
+                            <label htmlFor={`quote-upload-${item.id}`}>
+                              <Button component="span" size="small">
+                                העלה
+                              </Button>
+                            </label>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.product_url && (
+                          <Link href={item.product_url} target="_blank" rel="noopener noreferrer">
+                            קישור
+                          </Link>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" component="span">
+                          {item.notes}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <IconButton onClick={() => handleOpenDialog(item)} size="small">
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton onClick={() => handleDeleteClick(item.id)} size="small">
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Menu
+              anchorEl={exportAnchorEl}
+              open={Boolean(exportAnchorEl)}
+              onClose={handleExportClose}
             >
-              ביטול
-            </Button>
-          </DialogActions>
-        </Dialog>
+              <MenuItem onClick={exportToExcel}>
+                ייצא ל-Excel
+              </MenuItem>
+              <MenuItem onClick={handleEmailExport}>
+                שלח במייל
+              </MenuItem>
+            </Menu>
 
-        <Dialog 
-          open={openDialog} 
-          onClose={handleCloseDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>
-            {selectedItem ? 'עריכת פריט' : 'הוספת פריטים חדשים'}
-          </DialogTitle>
-          <DialogContent>
-            <Stack spacing={2} sx={{ mt: 2 }}>
-              {!selectedItem && (
-                <TextField
-                  fullWidth
-                  label="כותרת הרשימה"
-                  value={newItem.title}
-                  onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
-                  placeholder="למשל: ציוד להכנת מד״צים"
-                />
-              )}
-              
-              <TextField
-                fullWidth
-                multiline
-                rows={2}
-                label="הערות כלליות"
-                value={newItem.notes}
-                onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
-              />
+            <Dialog
+              open={deleteConfirmOpen}
+              onClose={() => setDeleteConfirmOpen(false)}
+              maxWidth="xs"
+              dir="rtl"
+            >
+              <DialogTitle sx={{ textAlign: 'center' }}>
+                האם למחוק את הפריט?
+              </DialogTitle>
+              <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleDeleteConfirm}
+                >
+                  כן, למחוק
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                >
+                  ביטול
+                </Button>
+              </DialogActions>
+            </Dialog>
 
-              <TextField
-                fullWidth
-                label="קישור למוצר"
-                value={newItem.product_url}
-                onChange={(e) => setNewItem({ ...newItem, product_url: e.target.value })}
-              />
-
-              {!selectedItem && (
-                <>
-                  <Typography variant="h6" sx={{ mt: 2 }}>
-                    פריטים
-                  </Typography>
-
-                  <Box sx={{ mb: 2 }}>
-                    <TableContainer component={Paper} variant="outlined">
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>שם הפריט</TableCell>
-                            <TableCell>כמות</TableCell>
-                            <TableCell>ספק</TableCell>
-                            <TableCell>מחיר</TableCell>
-                            <TableCell>כולל מע"מ</TableCell>
-                            <TableCell></TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {newItem.items.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell>{item.item_name}</TableCell>
-                              <TableCell>{item.quantity}</TableCell>
-                              <TableCell>{item.supplier}</TableCell>
-                              <TableCell>
-                                {item.price ? `₪${parseFloat(item.price).toLocaleString()}` : '-'}
-                              </TableCell>
-                              <TableCell>{item.include_vat ? 'כן' : 'לא'}</TableCell>
-                              <TableCell>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleRemoveItemFromList(index)}
-                                  sx={{ color: 'error.main' }}
-                                >
-                                  <DeleteIcon />
-                                </IconButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    <TextField
-                      label="שם הפריט"
-                      value={newItemInList.item_name}
-                      onChange={(e) => setNewItemInList({ ...newItemInList, item_name: e.target.value })}
-                      size="small"
-                    />
-                    <TextField
-                      label="כמות"
-                      type="number"
-                      value={newItemInList.quantity}
-                      onChange={(e) => setNewItemInList({ ...newItemInList, quantity: e.target.value })}
-                      size="small"
-                    />
-                    <TextField
-                      label="ספק"
-                      value={newItemInList.supplier}
-                      onChange={(e) => setNewItemInList({ ...newItemInList, supplier: e.target.value })}
-                      size="small"
-                    />
-                    <TextField
-                      label="מחיר"
-                      type="number"
-                      value={newItemInList.price}
-                      onChange={(e) => setNewItemInList({ ...newItemInList, price: e.target.value })}
-                      size="small"
-                    />
-                    <FormControl size="small">
-                      <InputLabel>כולל מע"מ</InputLabel>
-                      <Select
-                        value={newItemInList.include_vat}
-                        onChange={(e) => setNewItemInList({ ...newItemInList, include_vat: e.target.value })}
-                        label="כולל מע״מ"
-                      >
-                        <MenuItem value={true}>כן</MenuItem>
-                        <MenuItem value={false}>לא</MenuItem>
-                      </Select>
-                    </FormControl>
-                    <Button
-                      variant="outlined"
-                      onClick={handleAddItemToList}
-                      startIcon={<AddIcon />}
-                    >
-                      הוסף פריט
-                    </Button>
-                  </Box>
-                </>
-              )}
-
-              {selectedItem && (
-                <>
+            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+              <DialogTitle>
+                {selectedItem ? 'עריכת פריט' : 'הוספת פריט חדש'}
+              </DialogTitle>
+              <DialogContent>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
                   <TextField
-                    fullWidth
                     label="שם הפריט"
                     value={newItem.item_name}
                     onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-                  />
-                  <TextField
+                    required
                     fullWidth
+                  />
+
+                  <TextField
                     label="כמות"
-                    type="number"
                     value={newItem.quantity}
-                    onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                  />
-                  <TextField
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setNewItem({ ...newItem, quantity: value });
+                    }}
+                    type="text"
+                    required
                     fullWidth
+                  />
+
+                  <TextField
                     label="ספק"
                     value={newItem.supplier}
                     onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
-                  />
-                  <TextField
                     fullWidth
-                    label="מחיר"
-                    type="number"
-                    value={newItem.price}
-                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
                   />
-                  <FormControl fullWidth>
-                    <InputLabel>כולל מע"מ</InputLabel>
+
+                  <TextField
+                    label="מחיר"
+                    value={newItem.price}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9.]/g, '');
+                      setNewItem({ ...newItem, price: value });
+                    }}
+                    type="text"
+                    fullWidth
+                  />
+
+                  <FormControl fullWidth sx={{ mb: 2 }}>
+                    <InputLabel id="include-vat-label">מחיר כולל מע״ם</InputLabel>
                     <Select
+                      labelId="include-vat-label"
+                      label="מחיר כולל מע״ם"
                       value={newItem.include_vat}
                       onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
-                      label="כולל מע״מ"
                     >
-                      <MenuItem value={true}>כן</MenuItem>
-                      <MenuItem value={false}>לא</MenuItem>
+                      <MenuItem value={true}>כולל מע"ם</MenuItem>
+                      <MenuItem value={false}>לא כולל מע"ם</MenuItem>
                     </Select>
                   </FormControl>
-                </>
-              )}
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>ביטול</Button>
-            <Button onClick={handleSaveItem} variant="contained" color="primary">
-              {selectedItem ? 'שמור שינויים' : 'הוסף פריטים'}
-            </Button>
-          </DialogActions>
-        </Dialog>
 
-        <Snackbar
-          open={alert.open}
-          autoHideDuration={6000}
-          onClose={() => setAlert({ ...alert, open: false })}
-        >
-          <Alert
-            onClose={() => setAlert({ ...alert, open: false })}
-            severity={alert.severity}
-          >
-            {alert.message}
-          </Alert>
-        </Snackbar>
-      </Paper>
+                  <TextField
+                    label="קישור למוצר"
+                    value={newItem.product_url}
+                    onChange={(e) => setNewItem({ ...newItem, product_url: e.target.value })}
+                    fullWidth
+                    type="url"
+                  />
+
+                  <TextField
+                    label="הערות"
+                    value={newItem.notes}
+                    onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
+                    multiline
+                    rows={2}
+                    fullWidth
+                  />
+                </Box>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={handleCloseDialog}>ביטול</Button>
+                <Button onClick={handleSaveItem} variant="contained">
+                  {selectedItem ? 'עדכן' : 'שמור'}
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            <Snackbar
+              open={alert.open}
+              autoHideDuration={6000}
+              onClose={() => setAlert({ ...alert, open: false })}
+            >
+              <Alert
+                onClose={() => setAlert({ ...alert, open: false })}
+                severity={alert.severity}
+              >
+                {alert.message}
+              </Alert>
+            </Snackbar>
+          </Paper>
+        </>
+      )}
     </Box>
   );
 }

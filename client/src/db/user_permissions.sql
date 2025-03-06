@@ -48,14 +48,14 @@ where true;
 -- הגדרת הרשאות מיוחדות לאבירי
 update public.profiles
 set 
-  permissions = '["view_all_tasks", "view_department_events", "view_journal", "view_holidays", "view_forms", "view_inventory", "view_equipment"]'::jsonb,
+  permissions = '["view_department_events", "view_journal", "view_holidays", "view_forms", "view_inventory", "view_equipment"]'::jsonb,
   can_view_tasks_from = '["8001a803-b0be-4b8a-8d0d-a5a65fdfb5cc"]'::jsonb
 where id = 'f3a486ab-0383-4739-b57b-8dd4f5badbd5';
 
 -- הגדרת הרשאות מיוחדות לבעז
 update public.profiles
 set 
-  permissions = '["view_all_tasks", "view_department_events", "view_journal", "view_holidays", "view_forms", "view_inventory", "view_equipment"]'::jsonb,
+  permissions = '["view_department_events", "view_journal", "view_holidays", "view_forms", "view_inventory", "view_equipment"]'::jsonb,
   can_view_tasks_from = '["f3a486ab-0383-4739-b57b-8dd4f5badbd5"]'::jsonb
 where id = '8001a803-b0be-4b8a-8d0d-a5a65fdfb5cc';
 

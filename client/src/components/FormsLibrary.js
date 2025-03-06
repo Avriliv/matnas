@@ -339,17 +339,35 @@ const FormsLibrary = () => {
     }
   };
 
-  const handlePreview = async (fileName) => {
+  const handlePreview = async (file) => {
     try {
       setLoading(true);
       const { data: { signedUrl }, error } = await supabase.storage
         .from('forms')
-        .createSignedUrl(`${currentFolder.id}/${fileName}`, 3600); // URL תקף לשעה
+        .createSignedUrl(`${currentFolder.id}/${file.storage_path.split('/').pop()}`, 3600);
 
       if (error) throw error;
 
-      // פתיחת הקובץ בחלון חדש במקום בדיאלוג
-      window.open(signedUrl, '_blank');
+      // בדיקת סוג הקובץ
+      const fileType = file.type || '';
+      
+      if (fileType.includes('pdf')) {
+        // אם זה PDF, נשתמש ב-Google Docs Viewer
+        const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(signedUrl)}&embedded=true`;
+        setPreviewUrl(viewerUrl);
+      } else if (fileType.includes('word') || 
+                fileType.includes('excel') || 
+                fileType.includes('powerpoint') ||
+                fileType.includes('officedocument')) {
+        // אם זה מסמך Office, נשתמש ב-Office Online Viewer
+        const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`;
+        setPreviewUrl(viewerUrl);
+      } else {
+        // לקבצים אחרים, ננסה להציג ישירות
+        setPreviewUrl(signedUrl);
+      }
+      
+      setOpenPreview(true);
     } catch (error) {
       console.error('Error creating preview URL:', error);
       alert('שגיאה ביצירת תצוגה מקדימה');
@@ -360,6 +378,45 @@ const FormsLibrary = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* תצוגה מקדימה של קובץ */}
+      <Dialog
+        open={openPreview}
+        onClose={() => {
+          setOpenPreview(false);
+          setPreviewUrl(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle sx={{ textAlign: 'center', position: 'relative' }}>
+          תצוגה מקדימה
+          <IconButton
+            onClick={() => {
+              setOpenPreview(false);
+              setPreviewUrl(null);
+            }}
+            sx={{ position: 'absolute', left: 8, top: 8 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ width: '100%', height: '80vh', overflow: 'hidden' }}>
+            <iframe
+              src={previewUrl}
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                border: 'none',
+                backgroundColor: '#f5f5f5'
+              }}
+              title="תצוגה מקדימה"
+              allowFullScreen
+            />
+          </Box>
+        </DialogContent>
+      </Dialog>
+
       {/* כותרת וכפתור יצירת תיקייה */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 'bold' }}>אישורים וטפסים</Typography>
@@ -479,7 +536,7 @@ const FormsLibrary = () => {
                     </Box>
                     <Box>
                       <IconButton 
-                        onClick={() => handlePreview(file.storage_path.split('/').pop())}
+                        onClick={() => handlePreview(file)}
                         disabled={loading}
                         title="תצוגה מקדימה"
                         sx={{ color: 'primary.main' }}
