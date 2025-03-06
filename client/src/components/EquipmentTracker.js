@@ -152,29 +152,57 @@ function EquipmentTracker() {
         signature = signatureRef.current.toDataURL();
       }
 
-      // יצירת רשומות עבור כל פריט
-      const itemsToInsert = newItem.items.map(item => ({
-        item_name: item.item_name.trim(),
-        quantity: parseInt(item.quantity) || 1,
-        checkout_date: newItem.checkout_date,
-        staff_member: newItem.staff_member,
-        borrower_name: newItem.borrower_name.trim(),
-        notes: newItem.notes?.trim() || '',
-        signature: signature,
-        user_id: user.id
-      }));
+      if (newItem.id) {
+        // אם זה עריכה של פריט קיים
+        const itemToUpdate = {
+          item_name: newItem.items[0]?.item_name.trim() || '',
+          quantity: parseInt(newItem.items[0]?.quantity) || 1,
+          checkout_date: newItem.checkout_date,
+          staff_member: newItem.staff_member,
+          borrower_name: newItem.borrower_name.trim(),
+          notes: newItem.notes?.trim() || '',
+          signature: signature,
+          user_id: user.id
+        };
 
-      const { error } = await supabase
-        .from('equipment_tracking')
-        .insert(itemsToInsert);
+        const { error } = await supabase
+          .from('equipment_tracking')
+          .update(itemToUpdate)
+          .eq('id', newItem.id);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        setAlert({ open: true, message: 'שגיאה בשמירת הפריטים: ' + error.message, severity: 'error' });
-        throw error;
+        if (error) {
+          console.error('Supabase error:', error);
+          setAlert({ open: true, message: 'שגיאה בעדכון הפריט: ' + error.message, severity: 'error' });
+          throw error;
+        }
+
+        setAlert({ open: true, message: 'הפריט עודכן בהצלחה', severity: 'success' });
+      } else {
+        // אם זו הוספה של פריטים חדשים
+        const itemsToInsert = newItem.items.map(item => ({
+          item_name: item.item_name.trim(),
+          quantity: parseInt(item.quantity) || 1,
+          checkout_date: newItem.checkout_date,
+          staff_member: newItem.staff_member,
+          borrower_name: newItem.borrower_name.trim(),
+          notes: newItem.notes?.trim() || '',
+          signature: signature,
+          user_id: user.id
+        }));
+
+        const { error } = await supabase
+          .from('equipment_tracking')
+          .insert(itemsToInsert);
+
+        if (error) {
+          console.error('Supabase error:', error);
+          setAlert({ open: true, message: 'שגיאה בשמירת הפריטים: ' + error.message, severity: 'error' });
+          throw error;
+        }
+
+        setAlert({ open: true, message: 'הפריטים נוספו בהצלחה', severity: 'success' });
       }
 
-      setAlert({ open: true, message: 'הפריטים נוספו בהצלחה', severity: 'success' });
       handleCloseDialog();
       fetchEquipment();
     } catch (error) {
@@ -206,7 +234,13 @@ function EquipmentTracker() {
   };
 
   const handleEditItem = (item) => {
-    setNewItem(item);
+    setNewItem({
+      ...item,
+      items: [{
+        item_name: item.item_name,
+        quantity: item.quantity
+      }]
+    });
     setOpenDialog(true);
     if (signatureRef.current) {
       signatureRef.current.clear();
