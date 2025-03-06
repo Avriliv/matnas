@@ -318,6 +318,7 @@ function EquipmentTracker() {
   // הגדרת העמודות לייצוא
   const exportColumns = [
     { field: 'item_name', headerName: 'שם הפריט' },
+    { field: 'quantity', headerName: 'כמות' },
     { field: 'borrower_name', headerName: 'שואל' },
     { field: 'checkout_date', headerName: 'תאריך השאלה' },
     { field: 'staff_member', headerName: 'אחראי' },
