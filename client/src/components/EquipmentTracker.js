@@ -161,8 +161,7 @@ function EquipmentTracker() {
           staff_member: newItem.staff_member,
           borrower_name: newItem.borrower_name.trim(),
           notes: newItem.notes?.trim() || '',
-          signature: signature,
-          user_id: user.id
+          signature: signature
         };
 
         const { error } = await supabase
@@ -186,8 +185,7 @@ function EquipmentTracker() {
           staff_member: newItem.staff_member,
           borrower_name: newItem.borrower_name.trim(),
           notes: newItem.notes?.trim() || '',
-          signature: signature,
-          user_id: user.id
+          signature: signature
         }));
 
         const { error } = await supabase
