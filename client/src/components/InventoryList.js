@@ -48,14 +48,18 @@ function InventoryList() {
   const [itemToDelete, setItemToDelete] = useState(null);
 
   const [newItem, setNewItem] = useState({
+    title: '',
+    notes: '',
+    items: [],
+    product_url: '',
+    quote_file_url: null
+  });
+  const [newItemInList, setNewItemInList] = useState({
     item_name: '',
     quantity: '',
     supplier: '',
     price: '',
-    notes: '',
-    include_vat: true,
-    product_url: '',
-    quote_file_url: null
+    include_vat: true
   });
 
   useEffect(() => {
@@ -122,14 +126,18 @@ function InventoryList() {
     } else {
       setSelectedItem(null);
       setNewItem({
+        title: '',
+        notes: '',
+        items: [],
+        product_url: '',
+        quote_file_url: null
+      });
+      setNewItemInList({
         item_name: '',
         quantity: '',
         supplier: '',
         price: '',
-        notes: '',
-        include_vat: true,
-        product_url: '',
-        quote_file_url: null
+        include_vat: true
       });
     }
     setOpenDialog(true);
@@ -148,43 +156,74 @@ function InventoryList() {
 
   const handleSaveItem = async () => {
     try {
-      if (!newItem.item_name.trim()) {
-        showAlert('נא למלא את שם הפריט', 'error');
+      if (!newItem.title.trim()) {
+        showAlert('נא למלא את כותרת הרשימה', 'error');
         return;
       }
 
-      const itemData = {
-        item_name: newItem.item_name.trim(),
-        quantity: newItem.quantity ? parseInt(newItem.quantity) : 0,
-        supplier: newItem.supplier || null,
-        price: newItem.price ? parseFloat(newItem.price) : null,
-        notes: newItem.notes || null,
-        include_vat: newItem.include_vat === undefined ? true : newItem.include_vat,
-        product_url: newItem.product_url || null,
-        quote_file_url: newItem.quote_file_url || null
-      };
-
-      if (selectedItem?.id) {
-        itemData.id = selectedItem.id;
+      if (newItem.items.length === 0) {
+        showAlert('נא להוסיף לפחות פריט אחד', 'error');
+        return;
       }
+
+      // שמירת כל הפריטים
+      const itemsToSave = newItem.items.map(item => ({
+        item_name: item.item_name.trim(),
+        quantity: item.quantity ? parseInt(item.quantity) : 0,
+        supplier: item.supplier || null,
+        price: item.price ? parseFloat(item.price) : null,
+        notes: newItem.notes || null,
+        include_vat: item.include_vat === undefined ? true : item.include_vat,
+        product_url: newItem.product_url || null,
+        quote_file_url: newItem.quote_file_url || null,
+        group_title: newItem.title // שמירת הכותרת של הקבוצה
+      }));
 
       const { error } = await supabase
         .from('inventory')
-        .upsert([itemData]);
+        .insert(itemsToSave);
 
       if (error) {
-        console.error('Error saving item:', error);
-        showAlert(error.message || 'שגיאה בשמירת הפריט', 'error');
+        console.error('Error saving items:', error);
+        showAlert(error.message || 'שגיאה בשמירת הפריטים', 'error');
         return;
       }
 
-      showAlert(selectedItem ? 'פריט עודכן בהצלחה' : 'פריט נוסף בהצלחה');
+      showAlert('הפריטים נוספו בהצלחה');
       fetchInventory();
       handleCloseDialog();
     } catch (error) {
       console.error('Error:', error);
-      showAlert('שגיאה בשמירת הפריט', 'error');
+      showAlert('שגיאה בשמירת הפריטים', 'error');
     }
+  };
+
+  const handleAddItemToList = () => {
+    if (!newItemInList.item_name.trim()) {
+      showAlert('נא למלא את שם הפריט', 'error');
+      return;
+    }
+
+    setNewItem(prev => ({
+      ...prev,
+      items: [...prev.items, { ...newItemInList }]
+    }));
+
+    // איפוס הטופס של הפריט החדש
+    setNewItemInList({
+      item_name: '',
+      quantity: '',
+      supplier: '',
+      price: '',
+      include_vat: true
+    });
+  };
+
+  const handleRemoveItemFromList = (index) => {
+    setNewItem(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
   };
 
   const handleDeleteClick = (itemId) => {
@@ -318,7 +357,7 @@ function InventoryList() {
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
         >
-          הוסף פריט
+          הוסף פריטים
         </Button>
         <ExportButtons
           data={inventory}
@@ -450,85 +489,184 @@ function InventoryList() {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <Dialog 
+          open={openDialog} 
+          onClose={handleCloseDialog}
+          maxWidth="md"
+          fullWidth
+        >
           <DialogTitle>
-            {selectedItem ? 'עריכת פריט' : 'הוספת פריט חדש'}
+            {selectedItem ? 'עריכת פריט' : 'הוספת פריטים חדשים'}
           </DialogTitle>
           <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              {!selectedItem && (
+                <TextField
+                  fullWidth
+                  label="כותרת הרשימה"
+                  value={newItem.title}
+                  onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+                  placeholder="למשל: ציוד להכנת מד״צים"
+                />
+              )}
+              
               <TextField
-                label="שם הפריט"
-                value={newItem.item_name}
-                onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-                required
                 fullWidth
+                multiline
+                rows={2}
+                label="הערות כלליות"
+                value={newItem.notes}
+                onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
               />
 
               <TextField
-                label="כמות"
-                value={newItem.quantity}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '');
-                  setNewItem({ ...newItem, quantity: value });
-                }}
-                type="text"
-                required
                 fullWidth
-              />
-
-              <TextField
-                label="ספק"
-                value={newItem.supplier}
-                onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
-                fullWidth
-              />
-
-              <TextField
-                label="מחיר"
-                value={newItem.price}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9.]/g, '');
-                  setNewItem({ ...newItem, price: value });
-                }}
-                type="text"
-                fullWidth
-              />
-
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="include-vat-label">מחיר כולל מע״מ</InputLabel>
-                <Select
-                  labelId="include-vat-label"
-                  label="מחיר כולל מע״מ"
-                  value={newItem.include_vat}
-                  onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
-                >
-                  <MenuItem value={true}>כולל מע״מ</MenuItem>
-                  <MenuItem value={false}>לא כולל מע״מ</MenuItem>
-                </Select>
-              </FormControl>
-
-              <TextField
                 label="קישור למוצר"
                 value={newItem.product_url}
                 onChange={(e) => setNewItem({ ...newItem, product_url: e.target.value })}
-                fullWidth
-                type="url"
               />
 
-              <TextField
-                label="הערות"
-                value={newItem.notes}
-                onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
-                multiline
-                rows={2}
-                fullWidth
-              />
-            </Box>
+              {!selectedItem && (
+                <>
+                  <Typography variant="h6" sx={{ mt: 2 }}>
+                    פריטים
+                  </Typography>
+
+                  <Box sx={{ mb: 2 }}>
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>שם הפריט</TableCell>
+                            <TableCell>כמות</TableCell>
+                            <TableCell>ספק</TableCell>
+                            <TableCell>מחיר</TableCell>
+                            <TableCell>כולל מע"מ</TableCell>
+                            <TableCell></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {newItem.items.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{item.item_name}</TableCell>
+                              <TableCell>{item.quantity}</TableCell>
+                              <TableCell>{item.supplier}</TableCell>
+                              <TableCell>
+                                {item.price ? `₪${parseFloat(item.price).toLocaleString()}` : '-'}
+                              </TableCell>
+                              <TableCell>{item.include_vat ? 'כן' : 'לא'}</TableCell>
+                              <TableCell>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleRemoveItemFromList(index)}
+                                  sx={{ color: 'error.main' }}
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                    <TextField
+                      label="שם הפריט"
+                      value={newItemInList.item_name}
+                      onChange={(e) => setNewItemInList({ ...newItemInList, item_name: e.target.value })}
+                      size="small"
+                    />
+                    <TextField
+                      label="כמות"
+                      type="number"
+                      value={newItemInList.quantity}
+                      onChange={(e) => setNewItemInList({ ...newItemInList, quantity: e.target.value })}
+                      size="small"
+                    />
+                    <TextField
+                      label="ספק"
+                      value={newItemInList.supplier}
+                      onChange={(e) => setNewItemInList({ ...newItemInList, supplier: e.target.value })}
+                      size="small"
+                    />
+                    <TextField
+                      label="מחיר"
+                      type="number"
+                      value={newItemInList.price}
+                      onChange={(e) => setNewItemInList({ ...newItemInList, price: e.target.value })}
+                      size="small"
+                    />
+                    <FormControl size="small">
+                      <InputLabel>כולל מע"מ</InputLabel>
+                      <Select
+                        value={newItemInList.include_vat}
+                        onChange={(e) => setNewItemInList({ ...newItemInList, include_vat: e.target.value })}
+                        label="כולל מע״מ"
+                      >
+                        <MenuItem value={true}>כן</MenuItem>
+                        <MenuItem value={false}>לא</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="outlined"
+                      onClick={handleAddItemToList}
+                      startIcon={<AddIcon />}
+                    >
+                      הוסף פריט
+                    </Button>
+                  </Box>
+                </>
+              )}
+
+              {selectedItem && (
+                <>
+                  <TextField
+                    fullWidth
+                    label="שם הפריט"
+                    value={newItem.item_name}
+                    onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                  />
+                  <TextField
+                    fullWidth
+                    label="כמות"
+                    type="number"
+                    value={newItem.quantity}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                  />
+                  <TextField
+                    fullWidth
+                    label="ספק"
+                    value={newItem.supplier}
+                    onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
+                  />
+                  <TextField
+                    fullWidth
+                    label="מחיר"
+                    type="number"
+                    value={newItem.price}
+                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                  />
+                  <FormControl fullWidth>
+                    <InputLabel>כולל מע"מ</InputLabel>
+                    <Select
+                      value={newItem.include_vat}
+                      onChange={(e) => setNewItem({ ...newItem, include_vat: e.target.value })}
+                      label="כולל מע״מ"
+                    >
+                      <MenuItem value={true}>כן</MenuItem>
+                      <MenuItem value={false}>לא</MenuItem>
+                    </Select>
+                  </FormControl>
+                </>
+              )}
+            </Stack>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>ביטול</Button>
-            <Button onClick={handleSaveItem} variant="contained">
-              {selectedItem ? 'עדכן' : 'שמור'}
+            <Button onClick={handleSaveItem} variant="contained" color="primary">
+              {selectedItem ? 'שמור שינויים' : 'הוסף פריטים'}
             </Button>
           </DialogActions>
         </Dialog>
