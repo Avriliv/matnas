@@ -161,7 +161,7 @@ function EquipmentTracker() {
           staff_member: newItem.staff_member,
           borrower_name: newItem.borrower_name.trim(),
           notes: newItem.notes?.trim() || '',
-          signature: signature
+          borrower_signature: signature
         };
 
         const { error } = await supabase
@@ -185,7 +185,7 @@ function EquipmentTracker() {
           staff_member: newItem.staff_member,
           borrower_name: newItem.borrower_name.trim(),
           notes: newItem.notes?.trim() || '',
-          signature: signature
+          borrower_signature: signature
         }));
 
         const { error } = await supabase
@@ -376,6 +376,7 @@ function EquipmentTracker() {
           <TableHead>
             <TableRow>
               <TableCell>שם הפריט</TableCell>
+              <TableCell>כמות</TableCell>
               <TableCell>שם השואל</TableCell>
               <TableCell>תאריך משיכה</TableCell>
               <TableCell>תאריך החזרה</TableCell>
@@ -388,6 +389,7 @@ function EquipmentTracker() {
             {(selectedTab === 0 ? borrowedEquipment : returnedEquipment).map((item) => (
               <TableRow key={item.id}>
                 <TableCell>{item.item_name}</TableCell>
+                <TableCell>{item.quantity || 1}</TableCell>
                 <TableCell>{item.borrower_name}</TableCell>
                 <TableCell>{formatDate(item.checkout_date)}</TableCell>
                 <TableCell>{formatDate(item.return_date)}</TableCell>
