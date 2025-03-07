@@ -16,8 +16,8 @@ import SimpleCalendar from './components/SimpleCalendar';
 import DepartmentEvents from './components/DepartmentEvents';
 import EducationDates from './components/EducationDates';
 import FormsLibrary from './components/FormsLibrary';
-import InventoryList from './components/InventoryList';
 import EquipmentTracker from './components/EquipmentTracker';
+import EventsDistribution from './components/EventsDistribution';
 import Login from './components/Login';
 import rtlPlugin from 'stylis-plugin-rtl';
 import { CacheProvider } from '@emotion/react';
@@ -234,7 +234,7 @@ function App() {
                   <Tab label="אירועי מחלקה" {...a11yProps(2)} />
                   <Tab label="חופשות וחגים" {...a11yProps(3)} />
                   <Tab label="אישורים וטפסים" {...a11yProps(4)} />
-                  <Tab label="מלאי והזמנות" {...a11yProps(5)} />
+                  <Tab label="התפלגות אירועים" {...a11yProps(5)} />
                   <Tab label="מעקב ציוד" {...a11yProps(6)} />
                 </Tabs>
               </Box>
@@ -256,7 +256,7 @@ function App() {
                   <FormsLibrary />
                 </TabPanel>
                 <TabPanel value={currentTab} index={5}>
-                  <InventoryList />
+                  <EventsDistribution />
                 </TabPanel>
                 <TabPanel value={currentTab} index={6}>
                   <EquipmentTracker />
