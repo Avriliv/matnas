@@ -15,19 +15,25 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  MenuItem,
   Stack,
   Alert,
   Snackbar,
-  MenuItem,
   List,
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  IconButton,
-  Chip,
   Divider,
   ButtonGroup,
-  Menu
+  TableContainer,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  IconButton,
+  Menu,
+  Chip
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -45,21 +51,22 @@ const eventTypes = [
   'מפעל חיצוני'
 ];
 
+const initialEventState = {
+  title: '',
+  type: 'אירוע',
+  start_date: '',
+  description: ''
+};
+
 function DepartmentEvents() {
   const [events, setEvents] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [shareAnchorEl, setShareAnchorEl] = useState(null);
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [exportAnchorEl, setExportAnchorEl] = useState(null);
+  const [newEvent, setNewEvent] = useState(initialEventState);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
   const [loading, setLoading] = useState(true);
-
-  const [newEvent, setNewEvent] = useState({
-    title: '',
-    type: 'אירוע',
-    start_date: '',
-    end_date: '',
-    description: ''
-  });
 
   const fetchEvents = async () => {
     try {
@@ -69,27 +76,14 @@ function DepartmentEvents() {
       const { data, error } = await supabase
         .from('events')
         .select('*')
-        .gte('start_date', today)  // רק אירועים מהיום והלאה
-        .order('start_date', { ascending: true });  // מסודר לפי תאריך התחלה
+        .gte('start_date', today)
+        .order('start_date', { ascending: true });
 
       if (error) {
         throw error;
       }
 
-      // נביא גם אירועים מהחודש האחרון
-      const { data: pastEvents, error: pastError } = await supabase
-        .from('events')
-        .select('*')
-        .lt('start_date', today)  // אירועים מלפני היום
-        .gte('start_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])  // מהחודש האחרון
-        .order('start_date', { ascending: false });  // מסודר לפי תאריך התחלה יורד
-
-      if (pastError) {
-        throw pastError;
-      }
-
-      // נשלב את האירועים: קודם העתידיים ואז העבר הקרוב
-      setEvents([...(data || []), ...(pastEvents || [])]);
+      setEvents(data || []);
     } catch (error) {
       console.error('Error fetching events:', error);
       showAlert('שגיאה בטעינת האירועים', 'error');
@@ -106,68 +100,55 @@ function DepartmentEvents() {
     setAlert({ open: true, message, severity });
   };
 
-  const handleOpenDialog = (event = null) => {
-    if (event) {
-      setSelectedEvent(event);
-      setNewEvent({
-        title: event.title,
-        type: event.type,
-        start_date: event.start_date,
-        end_date: event.end_date || '',
-        description: event.description || ''
-      });
-    } else {
-      setSelectedEvent(null);
-      setNewEvent({
-        title: '',
-        type: 'אירוע',
-        start_date: '',
-        end_date: '',
-        description: ''
-      });
-    }
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setSelectedEvent(null);
-  };
-
-  const handleSaveEvent = async () => {
+  const handleAddEvent = async () => {
     try {
-      if (!newEvent.title || !newEvent.type || !newEvent.start_date) {
-        showAlert('נא למלא את כל שדות החובה', 'error');
-        return;
-      }
+      const { error } = await supabase
+        .from('events')
+        .insert([{
+          title: newEvent.title,
+          type: newEvent.type,
+          start_date: newEvent.start_date,
+          description: newEvent.description
+        }]);
 
-      if (selectedEvent) {
-        const { error } = await supabase
-          .from('events')
-          .update(newEvent)
-          .eq('id', selectedEvent.id);
-
-        if (error) throw error;
-        showAlert('האירוע עודכן בהצלחה');
-      } else {
-        const { error } = await supabase
-          .from('events')
-          .insert([newEvent]);
-
-        if (error) throw error;
-        showAlert('האירוע נוסף בהצלחה');
-      }
-
+      if (error) throw error;
+      
+      showAlert('האירוע נוסף בהצלחה');
+      setNewEvent(initialEventState);
+      setOpenDialog(false);
       await fetchEvents();
-      handleCloseDialog();
     } catch (error) {
-      console.error('Error saving event:', error);
-      showAlert('שגיאה בשמירת האירוע', 'error');
+      console.error('Error adding event:', error);
+      showAlert('שגיאה בהוספת האירוע', 'error');
+    }
+  };
+
+  const handleEditEvent = async () => {
+    try {
+      const { error } = await supabase
+        .from('events')
+        .update({
+          title: editingEvent.title,
+          type: editingEvent.type,
+          start_date: editingEvent.start_date,
+          description: editingEvent.description
+        })
+        .eq('id', editingEvent.id);
+
+      if (error) throw error;
+      
+      showAlert('האירוע עודכן בהצלחה');
+      setEditingEvent(null);
+      setOpenDialog(false);
+      await fetchEvents();
+    } catch (error) {
+      console.error('Error updating event:', error);
+      showAlert('שגיאה בעדכון האירוע', 'error');
     }
   };
 
   const handleDeleteEvent = async (id) => {
-    if (window.confirm('האם אתה בטוח שברצונך למחוק אירוע זה?')) {
+    if (window.confirm('האם למחוק את האירוע?')) {
       try {
         const { error } = await supabase
           .from('events')
@@ -187,7 +168,7 @@ function DepartmentEvents() {
 
   const formatDateRange = (startDate, endDate) => {
     const start = new Date(startDate).toLocaleDateString('he-IL');
-    if (!endDate) return start;
+    if (!endDate || endDate === startDate) return start;
     const end = new Date(endDate).toLocaleDateString('he-IL');
     return `${start} - ${end}`;
   };
@@ -196,18 +177,17 @@ function DepartmentEvents() {
     const doc = new jsPDF();
     doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
-    doc.text("משימות מתנ״ס", 14, 20);
+    doc.text("אירועי המחלקה", 14, 20);
 
     const tableData = events.map(event => [
       event.title,
       event.type,
       new Date(event.start_date).toLocaleDateString('he-IL'),
-      event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : '',
       event.description || ''
     ]);
 
     doc.autoTable({
-      head: [['כותרת', 'סוג', 'תאריך התחלה', 'תאריך סיום', 'תיאור']],
+      head: [['כותרת', 'סוג', 'תאריך', 'תיאור']],
       body: tableData,
       startY: 30,
       theme: 'grid',
@@ -215,43 +195,42 @@ function DepartmentEvents() {
       headStyles: { fillColor: [25, 118, 210] }
     });
 
-    doc.save('משימות_מתנס.pdf');
+    doc.save('אירועי_מחלקה.pdf');
   };
 
   const exportToExcel = () => {
     const ws = XLSX.utils.json_to_sheet(events.map(event => ({
       'כותרת': event.title,
       'סוג': event.type,
-      'תאריך התחלה': new Date(event.start_date).toLocaleDateString('he-IL'),
-      'תאריך סיום': event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : '',
+      'תאריך': new Date(event.start_date).toLocaleDateString('he-IL'),
       'תיאור': event.description || ''
     })));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "משימות");
+    XLSX.utils.book_append_sheet(wb, ws, "אירועים");
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([excelBuffer]), 'משימות_מתנס.xlsx');
+    saveAs(new Blob([excelBuffer]), 'אירועי_מחלקה.xlsx');
   };
 
   const shareViaWhatsApp = () => {
-    const text = encodeURIComponent(`משימות מתנ״ס:\n\n${events.map(event => 
-      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך התחלה: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתאריך סיום: ${event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : ''}\nתיאור: ${event.description || ''}\n`
+    const text = encodeURIComponent(`אירועי המחלקה:\n\n${events.map(event => 
+      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתיאור: ${event.description || ''}\n`
     ).join('\n')}`);
     window.open(`https://wa.me/?text=${text}`);
     setShareAnchorEl(null);
   };
 
   const shareViaEmail = () => {
-    const subject = encodeURIComponent('משימות מתנ״ס');
-    const body = encodeURIComponent(`משימות מתנ״ס:\n\n${events.map(event => 
-      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך התחלה: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתאריך סיום: ${event.end_date ? new Date(event.end_date).toLocaleDateString('he-IL') : ''}\nתיאור: ${event.description || ''}\n`
+    const subject = encodeURIComponent('אירועי המחלקה');
+    const body = encodeURIComponent(`אירועי המחלקה:\n\n${events.map(event => 
+      `כותרת: ${event.title}\nסוג: ${event.type}\nתאריך: ${new Date(event.start_date).toLocaleDateString('he-IL')}\nתיאור: ${event.description || ''}\n`
     ).join('\n')}`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
     setShareAnchorEl(null);
   };
 
   return (
-    <Box>
+    <Box sx={{ p: 3 }}>
       <Snackbar
         open={alert.open}
         autoHideDuration={6000}
@@ -284,20 +263,15 @@ function DepartmentEvents() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
+            onClick={() => {
+              setEditingEvent(null);
+              setNewEvent(initialEventState);
+              setOpenDialog(true);
+            }}
           >
             הוסף אירוע
           </Button>
         </Box>
-
-        <Menu
-          anchorEl={shareAnchorEl}
-          open={Boolean(shareAnchorEl)}
-          onClose={() => setShareAnchorEl(null)}
-        >
-          <MenuItem onClick={shareViaWhatsApp}>WhatsApp</MenuItem>
-          <MenuItem onClick={shareViaEmail}>אימייל</MenuItem>
-        </Menu>
 
         {loading ? (
           <Typography>טוען אירועים...</Typography>
@@ -332,7 +306,7 @@ function DepartmentEvents() {
                       secondary={
                         <Box component="div">
                           <Box component="div" sx={{ color: 'text.secondary' }}>
-                            {formatDateRange(event.start_date, event.end_date)}
+                            {new Date(event.start_date).toLocaleDateString('he-IL')}
                           </Box>
                           <Box component="div">
                             {event.description}
@@ -341,7 +315,14 @@ function DepartmentEvents() {
                       }
                     />
                     <ListItemSecondaryAction>
-                      <IconButton edge="end" onClick={() => handleOpenDialog(event)}>
+                      <IconButton edge="end" onClick={() => {
+                        setEditingEvent({
+                          ...event,
+                          title: event.title,
+                          start_date: event.start_date
+                        });
+                        setOpenDialog(true);
+                      }}>
                         <EditIcon />
                       </IconButton>
                       <IconButton edge="end" onClick={() => handleDeleteEvent(event.id)}>
@@ -356,25 +337,86 @@ function DepartmentEvents() {
         )}
       </Paper>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>{selectedEvent ? 'עריכת אירוע' : 'הוספת אירוע חדש'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+      <Menu
+        anchorEl={shareAnchorEl}
+        open={Boolean(shareAnchorEl)}
+        onClose={() => setShareAnchorEl(null)}
+        PaperProps={{
+          sx: {
+            borderRadius: 1,
+            boxShadow: 2,
+            mt: 1
+          }
+        }}
+      >
+        <MenuItem 
+          onClick={shareViaWhatsApp}
+          sx={{ py: 1, minWidth: 120 }}
+        >
+          <ShareIcon sx={{ mr: 1, fontSize: 20 }} />
+          WhatsApp
+        </MenuItem>
+        <MenuItem 
+          onClick={shareViaEmail}
+          sx={{ py: 1 }}
+        >
+          <ShareIcon sx={{ mr: 1, fontSize: 20 }} />
+          אימייל
+        </MenuItem>
+      </Menu>
+
+      <Dialog 
+        open={openDialog} 
+        onClose={() => setOpenDialog(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          borderBottom: '1px solid #eee',
+          pb: 2,
+          fontWeight: 'bold'
+        }}>
+          {editingEvent ? 'עריכת אירוע' : 'הוספת אירוע חדש'}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2.5}>
             <TextField
               label="כותרת"
-              value={newEvent.title}
-              onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+              value={editingEvent ? editingEvent.title : newEvent.title}
+              onChange={(e) => {
+                if (editingEvent) {
+                  setEditingEvent({ ...editingEvent, title: e.target.value });
+                } else {
+                  setNewEvent({ ...newEvent, title: e.target.value });
+                }
+              }}
               required
               fullWidth
+              variant="outlined"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
             />
 
             <TextField
               select
               label="סוג אירוע"
-              value={newEvent.type}
-              onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
+              value={editingEvent ? editingEvent.type : newEvent.type}
+              onChange={(e) => {
+                if (editingEvent) {
+                  setEditingEvent({ ...editingEvent, type: e.target.value });
+                } else {
+                  setNewEvent({ ...newEvent, type: e.target.value });
+                }
+              }}
               required
               fullWidth
+              variant="outlined"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
             >
               {eventTypes.map((type) => (
                 <MenuItem key={type} value={type}>
@@ -384,41 +426,64 @@ function DepartmentEvents() {
             </TextField>
 
             <TextField
-              label="תאריך התחלה"
+              label="תאריך"
               type="date"
-              value={newEvent.start_date}
-              onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })}
+              value={editingEvent ? editingEvent.start_date : newEvent.start_date}
+              onChange={(e) => {
+                if (editingEvent) {
+                  setEditingEvent({ ...editingEvent, start_date: e.target.value });
+                } else {
+                  setNewEvent({ ...newEvent, start_date: e.target.value });
+                }
+              }}
               required
               fullWidth
+              variant="outlined"
               InputLabelProps={{ shrink: true }}
-            />
-
-            <TextField
-              label="תאריך סיום"
-              type="date"
-              value={newEvent.end_date}
-              onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
             />
 
             <TextField
               label="תיאור"
-              value={newEvent.description}
-              onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+              value={editingEvent ? editingEvent.description : newEvent.description}
+              onChange={(e) => {
+                if (editingEvent) {
+                  setEditingEvent({ ...editingEvent, description: e.target.value });
+                } else {
+                  setNewEvent({ ...newEvent, description: e.target.value });
+                }
+              }}
               multiline
               rows={3}
               fullWidth
+              variant="outlined"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
             />
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>ביטול</Button>
-          <Button onClick={handleSaveEvent} variant="contained">
-            {selectedEvent ? 'עדכן' : 'שמור'}
+        <DialogActions sx={{ 
+          borderTop: '1px solid #eee',
+          pt: 2,
+          px: 3,
+          pb: 2
+        }}>
+          <Button 
+            onClick={() => setOpenDialog(false)}
+            variant="outlined"
+            color="inherit"
+          >
+            ביטול
+          </Button>
+          <Button 
+            onClick={editingEvent ? handleEditEvent : handleAddEvent} 
+            variant="contained"
+            color="primary"
+          >
+            {editingEvent ? 'עדכן' : 'שמור'}
           </Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   );
 }
