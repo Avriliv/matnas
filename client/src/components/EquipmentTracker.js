@@ -25,7 +25,8 @@ import {
   InputLabel,
   Select,
   Tabs,
-  Tab
+  Tab,
+  Checkbox
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -62,8 +63,10 @@ function EquipmentTracker() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [events, setEvents] = useState([]); // רשימת אירועים
-  const [selectedEvent, setSelectedEvent] = useState(null);
   const [expandedEvents, setExpandedEvents] = useState({}); // מצב פתיחה/סגירה של אירועים
+  const [selectedItems, setSelectedItems] = useState([]); // פריטים שנבחרו לעריכה מרובה
+  const [bulkEditOpen, setBulkEditOpen] = useState(false); // דיאלוג עריכה מרובה
+  const [bulkEditEvent, setBulkEditEvent] = useState(''); // אירוע שנבחר לעריכה מרובה
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -233,23 +236,39 @@ function EquipmentTracker() {
     setDeleteConfirmOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!itemToDelete) return;
+  const handleDeleteConfirm = (confirmed) => {
+    setDeleteConfirmOpen(false);
+    
+    if (confirmed) {
+      handleDeleteItem(itemToDelete);
+    }
+    
+    setItemToDelete(null);
+  };
 
+  const handleDeleteItem = async (itemId) => {
     try {
       const { error } = await supabase
         .from('equipment_tracking')
         .delete()
-        .eq('id', itemToDelete);
+        .eq('id', itemId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting item:', error);
+        setAlert({
+          open: true,
+          message: 'שגיאה במחיקת הפריט',
+          severity: 'error'
+        });
+        return;
+      }
 
-      setEquipment(equipment.filter(item => item.id !== itemToDelete));
       setAlert({
         open: true,
         message: 'הפריט נמחק בהצלחה',
         severity: 'success'
       });
+      fetchEquipment();
     } catch (error) {
       console.error('Error deleting item:', error);
       setAlert({
@@ -257,9 +276,6 @@ function EquipmentTracker() {
         message: 'שגיאה במחיקת הפריט',
         severity: 'error'
       });
-    } finally {
-      setDeleteConfirmOpen(false);
-      setItemToDelete(null);
     }
   };
 
@@ -415,22 +431,112 @@ function EquipmentTracker() {
     return errors;
   };
 
+  // פונקציה לטיפול בבחירת פריט לעריכה מרובה
+  const handleSelectItem = (itemId) => {
+    setSelectedItems(prev => {
+      if (prev.includes(itemId)) {
+        return prev.filter(id => id !== itemId);
+      } else {
+        return [...prev, itemId];
+      }
+    });
+  };
+
+  // פונקציה לפתיחת דיאלוג עריכה מרובה
+  const handleOpenBulkEdit = () => {
+    if (selectedItems.length === 0) {
+      setAlert({
+        open: true,
+        message: 'יש לבחור לפחות פריט אחד לעריכה',
+        severity: 'warning'
+      });
+      return;
+    }
+    setBulkEditOpen(true);
+  };
+
+  // פונקציה לסגירת דיאלוג עריכה מרובה
+  const handleCloseBulkEdit = () => {
+    setBulkEditOpen(false);
+    setBulkEditEvent('');
+  };
+
+  // פונקציה לשמירת עריכה מרובה
+  const handleSaveBulkEdit = async () => {
+    try {
+      if (!bulkEditEvent) {
+        setAlert({
+          open: true,
+          message: 'יש לבחור אירוע',
+          severity: 'warning'
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('equipment_tracking')
+        .update({ event_id: bulkEditEvent })
+        .in('id', selectedItems);
+
+      if (error) {
+        console.error('Error updating items:', error);
+        setAlert({
+          open: true,
+          message: 'שגיאה בעדכון הפריטים',
+          severity: 'error'
+        });
+        return;
+      }
+
+      setAlert({
+        open: true,
+        message: `${selectedItems.length} פריטים עודכנו בהצלחה`,
+        severity: 'success'
+      });
+
+      // איפוס הבחירה
+      setSelectedItems([]);
+      handleCloseBulkEdit();
+      fetchEquipment();
+    } catch (error) {
+      console.error('Error in bulk edit:', error);
+      setAlert({
+        open: true,
+        message: 'שגיאה בעדכון הפריטים',
+        severity: 'error'
+      });
+    }
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5">מעקב ציוד</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Typography variant="h5" component="h2">
+          מעקב ציוד
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {selectedItems.length > 0 && (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleOpenBulkEdit}
+              startIcon={<EditIcon />}
+            >
+              עריכה מרובה ({selectedItems.length})
+            </Button>
+          )}
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
+            color="primary"
             onClick={handleOpenDialog}
+            startIcon={<AddIcon />}
           >
-            הוסף פריט חדש
+            הוסף פריט
           </Button>
           <ExportButtons
-            data={exportData}
-            filename="מעקב_ציוד"
-            columns={exportColumns}
+            data={equipment}
+            filename="equipment_tracking"
+            sheetName="ציוד"
           />
         </Box>
       </Box>
@@ -446,6 +552,9 @@ function EquipmentTracker() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox" sx={{ width: '48px' }}>
+                בחירה
+              </TableCell>
               <TableCell>שם הפריט / אירוע</TableCell>
               <TableCell>כמות</TableCell>
               <TableCell>שם השואל</TableCell>
@@ -470,6 +579,7 @@ function EquipmentTracker() {
                   }}
                   onClick={() => toggleEventExpand(group.id)}
                 >
+                  <TableCell padding="checkbox"></TableCell>
                   <TableCell colSpan={8} sx={{ fontWeight: 'bold' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       {expandedEvents[group.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
@@ -481,6 +591,12 @@ function EquipmentTracker() {
                 {/* שורות הפריטים */}
                 {expandedEvents[group.id] && group.items.map((item) => (
                   <TableRow key={item.id} sx={{ backgroundColor: 'rgba(255, 255, 255, 0.9)' }}>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={selectedItems.includes(item.id)}
+                        onChange={() => handleSelectItem(item.id)}
+                      />
+                    </TableCell>
                     <TableCell>{item.item_name}</TableCell>
                     <TableCell>{item.quantity || 1}</TableCell>
                     <TableCell>{item.borrower_name}</TableCell>
@@ -661,32 +777,58 @@ function EquipmentTracker() {
         </DialogActions>
       </Dialog>
 
-      {/* דיאלוג אישור מחיקה */}
-      <Dialog
-        open={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
-        maxWidth="xs"
-        dir="rtl"
-      >
-        <DialogTitle sx={{ textAlign: 'center' }}>
-          האם למחוק את הפריט?
-        </DialogTitle>
-        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDeleteConfirm}
-          >
-            כן, למחוק
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => setDeleteConfirmOpen(false)}
-          >
-            ביטול
+      {/* דיאלוג עריכה מרובה */}
+      <Dialog open={bulkEditOpen} onClose={handleCloseBulkEdit} maxWidth="sm" fullWidth>
+        <DialogTitle>עריכה מרובה של {selectedItems.length} פריטים</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 2 }}>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="bulk-event-label">אירוע</InputLabel>
+              <Select
+                labelId="bulk-event-label"
+                value={bulkEditEvent}
+                onChange={(e) => setBulkEditEvent(e.target.value)}
+                label="אירוע"
+              >
+                <MenuItem value="">בחר אירוע</MenuItem>
+                {events.map((event) => (
+                  <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseBulkEdit}>ביטול</Button>
+          <Button onClick={handleSaveBulkEdit} variant="contained">
+            שמור
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* דיאלוג אישור מחיקה */}
+      <Snackbar
+        open={deleteConfirmOpen}
+        autoHideDuration={10000}
+        onClose={() => setDeleteConfirmOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          severity="warning" 
+          action={
+            <Box>
+              <Button color="inherit" size="small" onClick={() => handleDeleteConfirm(false)}>
+                לא
+              </Button>
+              <Button color="inherit" size="small" onClick={() => handleDeleteConfirm(true)}>
+                כן
+              </Button>
+            </Box>
+          }
+        >
+          האם למחוק את הפריט?
+        </Alert>
+      </Snackbar>
 
       <Snackbar
         open={alert.open}
