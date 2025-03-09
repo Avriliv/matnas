@@ -20,7 +20,14 @@ import {
   Checkbox,
   Chip,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Avatar,
+  AvatarGroup,
+  Tooltip,
+  Select,
+  FormControl,
+  InputLabel,
+  OutlinedInput
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -53,6 +60,33 @@ const TASK_STATUS = {
   DONE: 'הושלם'
 };
 
+const TASK_TYPES = [
+  'משימה',
+  'באג',
+  'פיצ׳ר',
+  'שיפור',
+  'מחקר',
+  'תיעוד',
+  'אחר'
+];
+
+const PRIORITY_LABELS = {
+  'LOW': 'נמוכה',
+  'MEDIUM': 'בינונית',
+  'HIGH': 'גבוהה',
+  'URGENT': 'דחופה'
+};
+
+const getPriorityColor = (priority, alpha = 1) => {
+  const colors = {
+    'LOW': `rgba(76, 175, 80, ${alpha})`,
+    'MEDIUM': `rgba(33, 150, 243, ${alpha})`,
+    'HIGH': `rgba(255, 152, 0, ${alpha})`,
+    'URGENT': `rgba(244, 67, 54, ${alpha})`
+  };
+  return colors[priority] || colors['MEDIUM'];
+};
+
 const eventTypes = [
   'משימה',
   'אירוע',
@@ -64,10 +98,118 @@ const eventTypes = [
   'אחר'
 ];
 
-const TaskList = ({ tasks: initialTasks }) => {
-  const [tasks, setTasks] = useState(initialTasks || []);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedTask, setSelectedTask] = useState(null);
+// רשימת צוות המתנ"ס
+const teamMembersData = [
+  { id: 'team-1', name: 'טל רובין', role: 'מנהלת המחלקה לחינוך בלתי פורמלי', email: 'noaryeladim@mta.org.il', phone: '050-6952119' },
+  { id: 'team-2', name: 'אור בן שמעון', role: 'מנהל מרכז ההדרכה לחינוך בלתי פורמלי', email: 'soninon@gmail.com', phone: '052-6774682' },
+  { id: 'team-3', name: 'מירב הבר', role: 'אדמינסטרציה', email: 'shluhot@mta.org.il', phone: '050-6675657' },
+  { id: 'team-4', name: 'בעז בן פורת', role: 'רכז אשכול מרכז', email: 'boazbp4@gmail.com', phone: '052-8011478' },
+  { id: 'team-5', name: 'אור אסייג', role: 'רכז אשכול ישובים מפונים', email: 'orassiag@gmail.com', phone: '054-7281154' },
+  { id: 'team-6', name: 'גילת גלוסמן', role: 'רכזת אשכול צפון', email: 'gilatglusman@gmail.com', phone: '054-6887446' },
+  { id: 'team-7', name: 'טל שני', role: 'רכז אשכול דרום', email: 'darommta@gmail.com', phone: '052-6178480' },
+  { id: 'team-8', name: 'חן סגי בליך', role: 'רכזת תוכנית להב"ה', email: 'chensagi289@gmail.com', phone: '054-5897291' },
+  { id: 'team-9', name: 'נעם גולובטי', role: 'מנהלת רשותית הרשות לביטחון קהילתי', email: 'harashutbk@mta.org.il', phone: '054-9732663' },
+  { id: 'team-10', name: 'לי הרמן', role: 'רכזת תחום ילדים - להב"ה', email: 'leeherman90@gmail.com', phone: '054-5652341' },
+  { id: 'team-11', name: 'אוריין כפרי', role: 'רכזת מיניות בריאה', email: 'oriancafri26@gmail.com', phone: '050-7844474' },
+  { id: 'team-12', name: 'ענת בן צבי', role: 'רכזת מרחבים בטוחים', email: 'anatbz11@gmail.com', phone: '054-6904888' },
+  { id: 'team-13', name: 'בר יערי', role: 'רכזת תוכנית דילר', email: 'diller.matteasher@gmail.com', phone: '052-6218216' },
+  { id: 'team-14', name: 'זיו לס', role: 'רכז השומר הצעיר', email: 'ziv.l@shmerhtz.org.il', phone: '054-4220098' },
+  { id: 'team-15', name: 'ורד אסף', role: 'רכזת השומר הצעיר', email: 'vered.a@shomerhtz.org.il', phone: '050-9017778' },
+  { id: 'team-16', name: 'נגה עובדיה', role: 'רכזת התנועה החדשה', email: 'hadasha.ma@mta.org.il', phone: '052-8011112' },
+  { id: 'team-17', name: 'ענבל גל', role: 'רכזת בני המושבים', email: 'inbalinba78@gmail.com', phone: '052-3528335' },
+  { id: 'team-18', name: 'צליל וייסברג', role: 'רכזת תחום השלב הבא', email: 'next.stage@mta.org', phone: '052-2441040' },
+  { id: 'team-19', name: 'שחר עובדיה', role: 'רכזת שנת השירות במטה אשר', email: 'shaharovadia31@gmail.com', phone: '052-8011333' },
+  { id: 'team-20', name: 'עדי ביאליק', role: 'רכזת קומונת שמרת', email: 'adibialik@gmail.com', phone: '050-4422429' },
+  { id: 'team-21', name: 'ג\'ו סמושי', role: 'רכזת פנאי וקהילה- שנות מצווה', email: 'pk3@mta.org.il', phone: '054-5600224' },
+  { id: 'team-22', name: 'הדס צימרמן', role: 'רכזת פנאי וקהילה - מועדון הורים', email: 'hadaszimm@gmail.com', phone: '052-3552887' },
+  { id: 'team-23', name: 'אברי לבני', role: 'רכז מפעלים וטיולים', email: 'avrimatnas@gmail.com', phone: '050-9806013' }
+];
+
+// משימות לדוגמה מותאמות לצוות המתנ"ס
+const sampleTasks = [
+  {
+    id: 'sample-1',
+    title: 'תיאום פעילות קיץ לנוער',
+    description: 'תיאום פעילויות קיץ לבני נוער במטה אשר, כולל סדנאות, טיולים ופעילויות העשרה',
+    status: 'TODO',
+    priority: 'HIGH',
+    due_date: new Date(Date.now() + 15 * 86400000).toISOString(), // 15 ימים מהיום
+    subtasks: [
+      { title: 'תיאום מדריכים', completed: true },
+      { title: 'הזמנת אוטובוסים', completed: false },
+      { title: 'תיאום מקומות לינה', completed: false },
+      { title: 'הכנת תוכנית פעילות', completed: true }
+    ],
+    owner: { id: 'team-1', name: 'טל רובין', email: 'noaryeladim@mta.org.il' }
+  },
+  {
+    id: 'sample-2',
+    title: 'ישיבת צוות חודשית',
+    description: 'ישיבת צוות של המחלקה לחינוך בלתי פורמלי לסיכום החודש ותכנון החודש הבא',
+    status: 'IN_PROGRESS',
+    priority: 'MEDIUM',
+    due_date: new Date(Date.now() + 3 * 86400000).toISOString(), // 3 ימים מהיום
+    subtasks: [
+      { title: 'הכנת מצגת', completed: true },
+      { title: 'תיאום חדר ישיבות', completed: true },
+      { title: 'שליחת זימונים', completed: true },
+      { title: 'הכנת סיכום פעילות חודשית', completed: false }
+    ],
+    owner: { id: 'team-2', name: 'אור בן שמעון', email: 'soninon@gmail.com' }
+  },
+  {
+    id: 'sample-3',
+    title: 'ארגון טיול שנתי',
+    description: 'ארגון הטיול השנתי לבני הנוער באזור הצפון, כולל תיאום הסעות, מדריכים ופעילויות',
+    status: 'TODO',
+    priority: 'HIGH',
+    due_date: new Date(Date.now() + 30 * 86400000).toISOString(), // חודש מהיום
+    subtasks: [
+      { title: 'בחירת מסלול', completed: true },
+      { title: 'תיאום עם רשות הטבע והגנים', completed: false },
+      { title: 'הזמנת אוטובוסים', completed: false },
+      { title: 'גיוס מדריכים', completed: true },
+      { title: 'הכנת ציוד', completed: false }
+    ],
+    owner: { id: 'team-23', name: 'אברי לבני', email: 'avrimatnas@gmail.com' }
+  },
+  {
+    id: 'sample-4',
+    title: 'הכנת תקציב שנתי',
+    description: 'הכנת התקציב השנתי למחלקה לחינוך בלתי פורמלי',
+    status: 'DONE',
+    priority: 'MEDIUM',
+    due_date: new Date(Date.now() - 10 * 86400000).toISOString(), // 10 ימים לפני היום
+    subtasks: [
+      { title: 'איסוף נתונים מהשנה הקודמת', completed: true },
+      { title: 'פגישה עם מנהלת המחלקה', completed: true },
+      { title: 'הכנת מצגת', completed: true },
+      { title: 'הגשה להנהלה', completed: true }
+    ],
+    owner: { id: 'team-3', name: 'מירב הבר', email: 'shluhot@mta.org.il' }
+  },
+  {
+    id: 'sample-5',
+    title: 'פיתוח תוכנית חדשה לנוער בסיכון',
+    description: 'פיתוח תוכנית חדשה לעבודה עם נוער בסיכון באזור מטה אשר',
+    status: 'IN_PROGRESS',
+    priority: 'HIGH',
+    due_date: new Date(Date.now() + 45 * 86400000).toISOString(), // 45 ימים מהיום
+    subtasks: [
+      { title: 'מיפוי צרכים', completed: true },
+      { title: 'פגישה עם אנשי מקצוע', completed: true },
+      { title: 'כתיבת תוכנית', completed: false },
+      { title: 'גיוס תקציב', completed: false },
+      { title: 'גיוס כוח אדם', completed: false }
+    ],
+    owner: { id: 'team-9', name: 'נעם גולובטי', email: 'harashutbk@mta.org.il' }
+  }
+];
+
+const TaskList = ({ user }) => {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [taskDialog, setTaskDialog] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -78,11 +220,14 @@ const TaskList = ({ tasks: initialTasks }) => {
     subtasks: [],
     owner: ''
   });
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [loadingTeamMembers, setLoadingTeamMembers] = useState(false);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [newSubtask, setNewSubtask] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedNotificationTask, setSelectedNotificationTask] = useState(null);
   const [selectedSubtaskIndex, setSelectedSubtaskIndex] = useState(null);
@@ -98,57 +243,166 @@ const TaskList = ({ tasks: initialTasks }) => {
   });
 
   useEffect(() => {
-    setTasks(initialTasks || []);
-  }, [initialTasks]);
-
-  useEffect(() => {
     const loadTasks = async () => {
       try {
         setLoading(true);
-        setError(null);
         
-        // קבלת המשתמש הנוכחי
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-          throw new Error('לא נמצא משתמש מחובר');
+        // בדיקה אם יש חיבור לסופאבייס
+        let session;
+        try {
+          const { data } = await supabase.auth.getSession();
+          session = data.session;
+        } catch (err) {
+          console.error('Error getting session:', err);
+          session = null;
         }
-
-        // קבלת הפרופיל של המשתמש עם ההרשאות
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('can_view_tasks_from')
-          .eq('id', user.id)
-          .single();
-
-        // מביאים את המשימות של המשתמש עצמו ושל המשתמשים שהוא יכול לראות
-        const { data, error } = await supabase
-          .from('tasks')
-          .select('*')
-          .or(`user_id.eq.${user.id}${userProfile?.can_view_tasks_from?.length ? `,user_id.in.(${userProfile.can_view_tasks_from.join(',')})` : ''}`)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setTasks(data || []);
-
-        // בדיקת התראות
-        await checkCustomNotifications(supabase);
+        
+        if (!session) {
+          // אם אין משתמש מחובר, נציג משימות לדוגמה במקום
+          setTasks(sampleTasks);
+          setError('אין חיבור לשרת. מוצגות משימות לדוגמה.');
+          return;
+        }
+        
+        try {
+          // שינוי השאילתה כדי להימנע מבעיות ביחסים בין טבלאות
+          const { data, error } = await supabase
+            .from('tasks')
+            .select('*')
+            .order('created_at', { ascending: false });
+          
+          if (error) {
+            console.error('Error in Supabase query:', error);
+            setTasks(sampleTasks);
+            setError('שגיאה בטעינת המשימות. מוצגות משימות לדוגמה.');
+            return;
+          }
+          
+          // אם אין נתונים, נציג משימות לדוגמה
+          if (!data || data.length === 0) {
+            setTasks(sampleTasks);
+            setError('לא נמצאו משימות. מוצגות משימות לדוגמה.');
+            return;
+          }
+          
+          // אם יש נתונים, ננסה להשלים מידע על הבעלים בנפרד
+          if (data && data.length > 0) {
+            // יצירת מיפוי של מזהי משתמשים ייחודיים
+            const ownerIds = [...new Set(data.filter(task => task.owner_id).map(task => task.owner_id))];
+            
+            if (ownerIds.length > 0) {
+              try {
+                const { data: ownersData, error: ownersError } = await supabase
+                  .from('profiles')
+                  .select('id, email');
+                
+                if (!ownersError && ownersData) {
+                  // יצירת מיפוי של מזהי משתמשים למידע שלהם
+                  const ownersMap = {};
+                  ownersData.forEach(owner => {
+                    ownersMap[owner.id] = owner;
+                  });
+                  
+                  // הוספת מידע על הבעלים לכל משימה
+                  data.forEach(task => {
+                    if (task.owner_id && ownersMap[task.owner_id]) {
+                      task.owner = {
+                        ...ownersMap[task.owner_id],
+                        name: ownersMap[task.owner_id].name || ownersMap[task.owner_id].email?.split('@')[0] || 'משתמש'
+                      };
+                    }
+                  });
+                }
+              } catch (err) {
+                console.error('Error fetching owners:', err);
+              }
+            }
+          }
+          
+          console.log('Loaded tasks:', data);
+          setTasks(data);
+          setError(null);
+        } catch (err) {
+          console.error('Error fetching tasks:', err);
+          setTasks(sampleTasks);
+          setError('שגיאה בטעינת המשימות. מוצגות משימות לדוגמה.');
+        }
       } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setError(error.message);
+        console.error('שגיאה בטעינת משימות:', error);
+        toast.error('שגיאה בטעינת המשימות');
+        setError('שגיאה בטעינת המשימות. נסה שוב מאוחר יותר.');
+        setTasks(sampleTasks);
       } finally {
         setLoading(false);
       }
     };
-
+    
     loadTasks();
+  }, []);
 
-    // הגדרת בדיקת התראות כל דקה
-    const notificationInterval = setInterval(async () => {
-      await checkCustomNotifications(supabase);
-    }, 60000);
+  useEffect(() => {
+    const loadTeamMembers = async () => {
+      try {
+        setLoadingTeamMembers(true);
+        
+        // בדיקה אם יש חיבור לסופאבייס
+        let session;
+        try {
+          const { data } = await supabase.auth.getSession();
+          session = data.session;
+        } catch (err) {
+          console.error('Error getting session:', err);
+          session = null;
+        }
+        
+        if (!session) {
+          // אם אין משתמש מחובר, נציג את צוות המתנ"ס במקום
+          setTeamMembers(teamMembersData);
+          return;
+        }
+        
+        try {
+          // שינוי השאילתה כדי להתמודד עם העדר עמודת name
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, email');
 
-    return () => clearInterval(notificationInterval);
+          if (error) {
+            console.error('Error fetching profiles:', error);
+            // נציג את צוות המתנ"ס במקרה של שגיאה
+            setTeamMembers(teamMembersData);
+            return;
+          }
+          
+          // הוספת שדה name מתוך האימייל אם הוא לא קיים
+          const processedData = data?.map(profile => ({
+            ...profile,
+            name: profile.name || profile.email?.split('@')[0] || 'משתמש'
+          })) || [];
+          
+          console.log('Loaded team members:', processedData);
+          
+          if (processedData.length === 0) {
+            // אם אין נתונים, נציג את צוות המתנ"ס
+            setTeamMembers(teamMembersData);
+          } else {
+            setTeamMembers(processedData);
+          }
+        } catch (err) {
+          console.error('Error fetching profiles:', err);
+          // נציג את צוות המתנ"ס במקרה של שגיאה
+          setTeamMembers(teamMembersData);
+        }
+      } catch (error) {
+        console.error('Error fetching team members:', error);
+        // נציג את צוות המתנ"ס במקרה של שגיאה
+        setTeamMembers(teamMembersData);
+      } finally {
+        setLoadingTeamMembers(false);
+      }
+    };
+
+    loadTeamMembers();
   }, []);
 
   useEffect(() => {
@@ -235,18 +489,15 @@ const TaskList = ({ tasks: initialTasks }) => {
   };
 
   const handleSaveTask = async () => {
+    if (!newTask.title.trim()) {
+      setError('יש למלא כותרת למשימה');
+      return;
+    }
+
     try {
-      if (!newTask.title.trim()) {
-        alert('נא למלא כותרת למשימה');
-        return;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
+      setLoading(true);
+      setError(null);
       
-      if (!user) {
-        throw new Error('לא נמצא משתמש מחובר');
-      }
-
       const taskData = {
         title: newTask.title.trim(),
         description: newTask.description.trim(),
@@ -255,22 +506,45 @@ const TaskList = ({ tasks: initialTasks }) => {
         date: newTask.date ? new Date(newTask.date).toISOString() : null,
         due_date: newTask.date ? new Date(newTask.date).toISOString() : null,
         subtasks: newTask.subtasks || [],
-        owner: newTask.owner?.trim() || null,
+        owner_id: newTask.owner || null,
         user_id: user.id,
         created_at: new Date().toISOString()
       };
-
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert([taskData])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // עדכון הרשימה המקומית
-      setTasks(prevTasks => [data, ...prevTasks]);
-      setOpenDialog(false);
+      
+      let result;
+      
+      if (editingTaskId) {
+        // Update existing task
+        const { data, error } = await supabase
+          .from('tasks')
+          .update(taskData)
+          .eq('id', editingTaskId)
+          .select();
+          
+        if (error) throw error;
+        result = data[0];
+        
+        // Update local state
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            task.id === editingTaskId ? { ...task, ...result } : task
+          )
+        );
+      } else {
+        // Create new task
+        const { data, error } = await supabase
+          .from('tasks')
+          .insert([taskData])
+          .select();
+          
+        if (error) throw error;
+        result = data[0];
+        
+        // Update local state
+        setTasks(prevTasks => [...prevTasks, result]);
+      }
+      
+      // Reset form
       setNewTask({
         title: '',
         description: '',
@@ -281,73 +555,44 @@ const TaskList = ({ tasks: initialTasks }) => {
         subtasks: [],
         owner: ''
       });
-
-      // שליחת התראה על משימה חדשה
-      await showNewTaskNotification(data);
-
-      toast.success('המשימה נוספה בהצלחה');
+      setEditingTaskId(null);
+      setTaskDialog(false);
+      
+      // Show success message
+      toast.success(editingTaskId ? 'המשימה עודכנה בהצלחה' : 'המשימה נוספה בהצלחה');
     } catch (error) {
-      console.error('שגיאה בשמירת משימה:', error);
-      toast.error('שגיאה בשמירת המשימה');
+      console.error('Error saving task:', error);
+      setError('אירעה שגיאה בשמירת המשימה');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpdateTask = async () => {
+  const handleUpdateTask = async (taskId, updatedFields) => {
     try {
-      if (!newTask.title.trim()) {
-        alert('נא למלא כותרת למשימה');
-        return;
-      }
-
-      if (!selectedTask) {
-        throw new Error('לא נבחרה משימה לעדכון');
-      }
-
-      const taskData = {
-        title: newTask.title.trim(),
-        description: newTask.description.trim(),
-        status: newTask.status,
-        type: newTask.type === 'אחר' ? newTask.customType : newTask.type,
-        date: newTask.date ? new Date(newTask.date).toISOString() : null,
-        due_date: newTask.date ? new Date(newTask.date).toISOString() : null,
-        subtasks: newTask.subtasks || [],
-        owner: newTask.owner?.trim() || null,
-        updated_at: new Date().toISOString()
-      };
-
+      setLoading(true);
+      
       const { data, error } = await supabase
         .from('tasks')
-        .update(taskData)
-        .eq('id', selectedTask.id)
-        .select()
-        .single();
-
+        .update(updatedFields)
+        .eq('id', taskId)
+        .select();
+        
       if (error) throw error;
-
+      
       // עדכון הרשימה המקומית
       setTasks(prevTasks => 
         prevTasks.map(task => 
-          task.id === selectedTask.id ? data : task
+          task.id === taskId ? { ...task, ...updatedFields } : task
         )
       );
       
-      setOpenDialog(false);
-      setSelectedTask(null);
-      setNewTask({
-        title: '',
-        description: '',
-        status: 'TODO',
-        type: 'משימה',
-        customType: '',
-        date: null,
-        subtasks: [],
-        owner: ''
-      });
-
       toast.success('המשימה עודכנה בהצלחה');
     } catch (error) {
       console.error('שגיאה בעדכון משימה:', error);
       toast.error('שגיאה בעדכון המשימה');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -378,27 +623,51 @@ const TaskList = ({ tasks: initialTasks }) => {
 
   const handleToggleSubtask = async (taskId, subtaskIndex) => {
     try {
+      // עדכון המצב המקומי
       const updatedTasks = [...tasks];
       const taskIndex = updatedTasks.findIndex(t => t.id === taskId);
       
-      if (taskIndex === -1) {
-        console.error('משימה לא נמצאה:', taskId);
-        return;
+      if (taskIndex === -1) return;
+      
+      const task = updatedTasks[taskIndex];
+      const subtasks = [...task.subtasks];
+      
+      // בדיקה אם תת-המשימה היא מחרוזת או אובייקט
+      if (typeof subtasks[subtaskIndex] === 'string') {
+        // אם זו מחרוזת, נמיר אותה לאובייקט
+        subtasks[subtaskIndex] = {
+          title: subtasks[subtaskIndex],
+          completed: true
+        };
+      } else {
+        // אם זה אובייקט, נהפוך את המצב
+        subtasks[subtaskIndex] = {
+          ...subtasks[subtaskIndex],
+          completed: !subtasks[subtaskIndex].completed
+        };
       }
       
-      // עדכון הסטטוס של תת המשימה
-      updatedTasks[taskIndex].subtasks[subtaskIndex].completed = !updatedTasks[taskIndex].subtasks[subtaskIndex].completed;
-
+      // עדכון המשימה עם תתי-המשימות המעודכנות
+      updatedTasks[taskIndex] = {
+        ...task,
+        subtasks
+      };
+      
+      setTasks(updatedTasks);
+      
+      // עדכון בסופאבייס
+      if (taskId.startsWith('sample-')) return; // לא מעדכנים משימות לדוגמה
+      
       const { error } = await supabase
         .from('tasks')
-        .update({ subtasks: updatedTasks[taskIndex].subtasks })
+        .update({ subtasks })
         .eq('id', taskId);
-
+        
       if (error) throw error;
-
-      setTasks(updatedTasks);
+      
     } catch (error) {
-      console.error('שגיאה בעדכון תת משימה:', error);
+      console.error('שגיאה בעדכון תת-משימה:', error);
+      toast.error('שגיאה בעדכון תת-המשימה');
     }
   };
 
@@ -625,16 +894,42 @@ const TaskList = ({ tasks: initialTasks }) => {
             }}
           />
         </LocalizationProvider>
-        <TextField
-          margin="dense"
-          label="אחראי"
-          type="text"
-          fullWidth
-          value={newTask.owner}
-          onChange={(e) => setNewTask({ ...newTask, owner: e.target.value })}
-          InputProps={{ style: { textAlign: 'right' } }}
-          sx={{ mb: 2 }}
-        />
+        <FormControl sx={{ width: '100%', mb: 2 }}>
+          <InputLabel id="task-owner-label">אחראי</InputLabel>
+          <Select
+            labelId="task-owner-label"
+            id="task-owner-select"
+            value={newTask.owner || ''}
+            onChange={(e) => setNewTask({ ...newTask, owner: e.target.value })}
+            input={<OutlinedInput label="אחראי" />}
+          >
+            <MenuItem value="">ללא</MenuItem>
+            {loadingTeamMembers ? (
+              <MenuItem disabled>
+                <CircularProgress size={20} />
+                &nbsp;טוען משתמשים...
+              </MenuItem>
+            ) : (
+              teamMembers.map(member => (
+                <MenuItem key={member.id} value={member.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Avatar 
+                      sx={{ 
+                        width: 24, 
+                        height: 24,
+                        fontSize: '0.75rem',
+                        bgcolor: 'secondary.main'
+                      }}
+                    >
+                      {member.name?.substring(0, 1).toUpperCase() || '?'}
+                    </Avatar>
+                    {member.name || member.email}
+                  </Box>
+                </MenuItem>
+              ))
+            )}
+          </Select>
+        </FormControl>
         <Box sx={{ mt: 2 }}>
           <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>תתי משימות</Typography>
           <Box sx={{ display: 'flex', mb: 2 }}>
@@ -682,6 +977,12 @@ const TaskList = ({ tasks: initialTasks }) => {
                         subtasks: newTask.subtasks.filter((_, i) => i !== index)
                       });
                     }}
+                    sx={{ 
+                      color: 'text.secondary',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      }
+                    }}
                   >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -711,7 +1012,7 @@ const TaskList = ({ tasks: initialTasks }) => {
         </Button>
         <Button 
           variant="contained" 
-          onClick={selectedTask ? handleUpdateTask : handleSaveTask}
+          onClick={selectedTask ? () => handleUpdateTask(selectedTask.id, newTask) : handleSaveTask}
           sx={{ 
             borderRadius: '8px',
             boxShadow: '0 4px 8px rgba(25, 118, 210, 0.2)',
@@ -1160,42 +1461,50 @@ const TaskList = ({ tasks: initialTasks }) => {
                                       overflow: 'visible',
                                     }}
                                   >
-                                    <CardContent sx={{ p: 2 }}>
-                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                                        <Typography variant="subtitle1" component="div" sx={{ 
-                                          fontWeight: 600,
-                                          fontSize: '0.95rem',
-                                          lineHeight: 1.3,
-                                          color: 'text.primary',
-                                          mb: 0.5
-                                        }}>
+                                    <CardContent sx={{ 
+                                      p: 2, 
+                                      '&:last-child': { 
+                                        pb: 2 
+                                      },
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 1
+                                    }}>
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between',
+                                        alignItems: 'flex-start'
+                                      }}>
+                                        <Typography 
+                                          variant="h6" 
+                                          component="div" 
+                                          sx={{ 
+                                            fontWeight: 'bold',
+                                            fontSize: '1rem',
+                                            mb: 1,
+                                            maxWidth: '80%',
+                                            wordBreak: 'break-word'
+                                          }}
+                                        >
                                           {task.title}
                                         </Typography>
-                                        <Box sx={{ 
-                                          display: 'flex', 
-                                          gap: 0.5,
-                                          opacity: 0.4,
-                                          transition: 'opacity 0.2s',
-                                          '.MuiCard-root:hover &': {
-                                            opacity: 1
-                                          }
-                                        }}>
-                                          <IconButton
-                                            size="small"
+                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                          <IconButton 
+                                            size="small" 
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setSelectedTask(task);
+                                              setEditingTaskId(task.id);
                                               setNewTask({
                                                 title: task.title,
-                                                description: task.description,
-                                                status: task.status,
-                                                type: task.type,
-                                                customType: task.customType,
-                                                date: task.date ? new Date(task.date) : null,
-                                                subtasks: task.subtasks || [],
-                                                owner: task.owner || ''
+                                                description: task.description || '',
+                                                status: task.status || 'TODO',
+                                                priority: task.priority || 'MEDIUM',
+                                                due_date: task.due_date ? new Date(task.due_date) : null,
+                                                owner: task.owner || '',
+                                                subtasks: task.subtasks || []
                                               });
-                                              setOpenDialog(true);
+                                              setTaskDialog(true);
                                             }}
                                             sx={{ 
                                               color: 'primary.main',
@@ -1209,8 +1518,8 @@ const TaskList = ({ tasks: initialTasks }) => {
                                           >
                                             <EditIcon fontSize="small" />
                                           </IconButton>
-                                          <IconButton
-                                            size="small"
+                                          <IconButton 
+                                            size="small" 
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleDeleteClick(task.id);
@@ -1269,54 +1578,85 @@ const TaskList = ({ tasks: initialTasks }) => {
                                         </Typography>
                                       )}
                                       
-                                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                                        <Chip
-                                          size="small"
-                                          label={task.type}
-                                          sx={{ 
-                                            backgroundColor: 'rgba(33, 150, 243, 0.08)',
-                                            color: 'info.dark',
-                                            fontWeight: 500,
-                                            fontSize: '0.75rem',
-                                            height: '22px',
-                                            borderRadius: '4px'
-                                          }}
-                                        />
-                                        {task.date && (
-                                          <Chip
-                                            size="small"
-                                            icon={<EventIcon style={{ fontSize: '14px' }} />}
-                                            label={new Date(task.date).toLocaleDateString('he-IL')}
-                                            sx={{ 
-                                              backgroundColor: 'rgba(76, 175, 80, 0.08)',
-                                              color: 'success.dark',
-                                              fontWeight: 500,
-                                              fontSize: '0.75rem',
-                                              height: '22px',
-                                              borderRadius: '4px'
-                                            }}
-                                          />
-                                        )}
-                                        {task.owner && (
-                                          <Chip
-                                            size="small"
-                                            icon={<PersonIcon style={{ fontSize: '14px' }} />}
-                                            label={task.owner}
-                                            sx={{ 
-                                              backgroundColor: 'rgba(156, 39, 176, 0.08)',
-                                              color: 'secondary.dark',
-                                              fontWeight: 500,
-                                              fontSize: '0.75rem',
-                                              height: '22px',
-                                              borderRadius: '4px'
-                                            }}
-                                          />
-                                        )}
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap',
+                                        gap: 1,
+                                        mt: 'auto'
+                                      }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                          {task.due_date && (
+                                            <Tooltip title="תאריך יעד">
+                                              <Chip
+                                                icon={<EventIcon fontSize="small" />}
+                                                label={new Date(task.due_date).toLocaleDateString('he-IL')}
+                                                size="small"
+                                                sx={{ 
+                                                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                                                  borderRadius: '16px',
+                                                  '& .MuiChip-icon': {
+                                                    color: 'primary.main'
+                                                  }
+                                                }}
+                                              />
+                                            </Tooltip>
+                                          )}
+                                          
+                                          {task.priority && (
+                                            <Tooltip title="עדיפות">
+                                              <Chip
+                                                label={PRIORITY_LABELS[task.priority]}
+                                                size="small"
+                                                sx={{ 
+                                                  backgroundColor: getPriorityColor(task.priority, 0.1),
+                                                  color: getPriorityColor(task.priority),
+                                                  borderRadius: '16px',
+                                                  fontWeight: 500
+                                                }}
+                                              />
+                                            </Tooltip>
+                                          )}
+                                        </Box>
+                                        
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                          {task.owner && (
+                                            <Tooltip title={`אחראי: ${task.owner.name || task.owner.email}`}>
+                                              <Avatar 
+                                                sx={{ 
+                                                  width: 28, 
+                                                  height: 28,
+                                                  fontSize: '0.875rem',
+                                                  bgcolor: 'primary.main'
+                                                }}
+                                              >
+                                                {(task.owner.name || task.owner.email).substring(0, 1).toUpperCase()}
+                                              </Avatar>
+                                            </Tooltip>
+                                          )}
+                                          
+                                          {task.subtasks && task.subtasks.length > 0 && (
+                                            <Tooltip title={`${task.subtasks.filter(st => st.completed).length}/${task.subtasks.length} תתי-משימות הושלמו`}>
+                                              <Chip
+                                                size="small"
+                                                label={`${task.subtasks.filter(st => st.completed).length}/${task.subtasks.length}`}
+                                                sx={{ 
+                                                  height: 24,
+                                                  backgroundColor: 'rgba(0, 0, 0, 0.08)',
+                                                  '& .MuiChip-label': {
+                                                    px: 1
+                                                  }
+                                                }}
+                                              />
+                                            </Tooltip>
+                                          )}
+                                        </Box>
                                       </Box>
                                       
                                       {task.subtasks && task.subtasks.length > 0 && (
                                         <Box sx={{ 
-                                          mt: 1, 
+                                          mt: 2, 
                                           pt: 1, 
                                           borderTop: '1px dashed rgba(0,0,0,0.1)',
                                         }}>
@@ -1331,7 +1671,7 @@ const TaskList = ({ tasks: initialTasks }) => {
                                           >
                                             תתי-משימות ({task.subtasks.length})
                                           </Typography>
-                                          <Box sx={{ maxHeight: '100px', overflowY: 'auto' }}>
+                                          <Box sx={{ maxHeight: '120px', overflowY: 'auto' }}>
                                             {task.subtasks.map((subtask, idx) => (
                                               <Box 
                                                 key={idx} 
@@ -1364,7 +1704,7 @@ const TaskList = ({ tasks: initialTasks }) => {
                                                       display: 'inline-block'
                                                     }}
                                                   />
-                                                  {subtask.title}
+                                                  {typeof subtask === 'string' ? subtask : subtask.title}
                                                 </Typography>
                                                 <Box sx={{ display: 'flex', gap: 0.5 }}>
                                                   <IconButton
@@ -1387,26 +1727,6 @@ const TaskList = ({ tasks: initialTasks }) => {
                                                       <CheckCircleIcon sx={{ fontSize: '14px' }} /> : 
                                                       <RadioButtonUncheckedIcon sx={{ fontSize: '14px' }} />
                                                     }
-                                                  </IconButton>
-                                                  <IconButton
-                                                    size="small"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setSelectedNotificationTask(task);
-                                                      setSelectedSubtaskIndex(idx);
-                                                      setNotificationDialog(true);
-                                                    }}
-                                                    sx={{ 
-                                                      color: 'primary.main',
-                                                      p: 0.5,
-                                                      opacity: 0.6,
-                                                      '&:hover': {
-                                                        opacity: 1,
-                                                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                                                      }
-                                                    }}
-                                                  >
-                                                    <NotificationsIcon sx={{ fontSize: '14px' }} />
                                                   </IconButton>
                                                 </Box>
                                               </Box>
