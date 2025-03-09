@@ -230,7 +230,7 @@ function DepartmentEvents() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Snackbar
         open={alert.open}
         autoHideDuration={6000}
@@ -279,60 +279,51 @@ function DepartmentEvents() {
           <Typography>אין אירועים להצגה</Typography>
         ) : (
           <List>
-            {events.map((event, index) => {
-              const isEventPast = new Date(event.start_date) < new Date();
-              return (
-                <React.Fragment key={event.id}>
-                  {index > 0 && <Divider />}
-                  <ListItem>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="h6">{event.title}</Typography>
-                          <Chip 
-                            label={event.type} 
-                            size="small" 
-                            color={isEventPast ? "default" : "primary"}
-                          />
-                          {isEventPast && (
-                            <Chip 
-                              label="הסתיים" 
-                              size="small" 
-                              color="default"
-                            />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box component="div">
-                          <Box component="div" sx={{ color: 'text.secondary' }}>
-                            {new Date(event.start_date).toLocaleDateString('he-IL')}
-                          </Box>
-                          <Box component="div">
-                            {event.description}
-                          </Box>
-                        </Box>
-                      }
-                    />
-                    <ListItemSecondaryAction>
-                      <IconButton edge="end" onClick={() => {
-                        setEditingEvent({
-                          ...event,
-                          title: event.title,
-                          start_date: event.start_date
-                        });
-                        setOpenDialog(true);
-                      }}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton edge="end" onClick={() => handleDeleteEvent(event.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                </React.Fragment>
-              );
-            })}
+            {events.map((event) => (
+              <ListItem key={event.id}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <div>{event.title}</div>
+                      <Chip 
+                        label={event.type} 
+                        size="small" 
+                        color={new Date(event.start_date) < new Date() ? "default" : "primary"}
+                      />
+                      {new Date(event.start_date) < new Date() && (
+                        <Chip 
+                          label="הסתיים" 
+                          size="small" 
+                          color="default"
+                        />
+                      )}
+                    </Box>
+                  }
+                  secondary={
+                    <Box>
+                      <div>תאריך: {new Date(event.start_date).toLocaleDateString('he-IL')}</div>
+                      <div>סוג: {event.type}</div>
+                      {event.description && <div>תיאור: {event.description}</div>}
+                    </Box>
+                  }
+                />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <IconButton size="small" onClick={() => {
+                    setEditingEvent({
+                      ...event,
+                      title: event.title,
+                      start_date: event.start_date
+                    });
+                    setOpenDialog(true);
+                  }}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => handleDeleteEvent(event.id)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              </ListItem>
+            ))}
           </List>
         )}
       </Paper>
