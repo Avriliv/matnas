@@ -2,26 +2,24 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  TextField,
-  Paper,
   Typography,
-  IconButton,
-  Menu,
-  MenuItem,
-  Stack,
-  Alert,
-  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Paper,
+  IconButton,
+  Snackbar,
+  Alert,
   FormControl,
+  MenuItem,
   InputLabel,
   Select,
   Tabs,
@@ -33,7 +31,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon
 } from '@mui/icons-material';
 import SignaturePad from 'react-signature-canvas';
 import { supabase } from '../supabaseClient';
@@ -69,6 +68,7 @@ function EquipmentTracker() {
   const [bulkEditOpen, setBulkEditOpen] = useState(false); // דיאלוג עריכה מרובה
   const [bulkEditEvent, setBulkEditEvent] = useState(''); // אירוע שנבחר לעריכה מרובה
   const [bulkEditNewEventName, setBulkEditNewEventName] = useState(''); // שם אירוע חדש לעריכה מרובה
+  const [selectAllVisible, setSelectAllVisible] = useState(false); // האם להציג את כפתור "סמן הכל"
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -470,9 +470,50 @@ function EquipmentTracker() {
       if (prev.includes(itemId)) {
         return prev.filter(id => id !== itemId);
       } else {
-        return [...prev, itemId];
+        const newSelectedItems = [...prev, itemId];
+        // אם זה הפריט הראשון שנבחר, הצג את כפתור "סמן הכל"
+        if (newSelectedItems.length === 1) {
+          setSelectAllVisible(true);
+        }
+        return newSelectedItems;
       }
     });
+  };
+
+  // פונקציה לבחירת כל הפריטים
+  const handleSelectAll = (groupId = null) => {
+    // אם groupId מוגדר, בחר רק את הפריטים מהקבוצה הזו
+    // אחרת, בחר את כל הפריטים מכל הקבוצות שפתוחות
+    const itemsToSelect = [];
+    
+    if (groupId) {
+      // בחר רק פריטים מהקבוצה הספציפית
+      const group = (selectedTab === 0 ? groupedBorrowedEquipment : groupedReturnedEquipment)
+        .find(g => g.id === groupId);
+      
+      if (group && expandedEvents[group.id]) {
+        group.items.forEach(item => {
+          itemsToSelect.push(item.id);
+        });
+      }
+    } else {
+      // בחר את כל הפריטים מכל הקבוצות הפתוחות
+      (selectedTab === 0 ? groupedBorrowedEquipment : groupedReturnedEquipment).forEach(group => {
+        if (expandedEvents[group.id]) {
+          group.items.forEach(item => {
+            itemsToSelect.push(item.id);
+          });
+        }
+      });
+    }
+    
+    setSelectedItems(itemsToSelect);
+  };
+
+  // פונקציה לביטול בחירת כל הפריטים
+  const handleDeselectAll = () => {
+    setSelectedItems([]);
+    setSelectAllVisible(false);
   };
 
   // פונקציה לפתיחת דיאלוג עריכה מרובה
@@ -540,16 +581,68 @@ function EquipmentTracker() {
         }
       }
 
-      const { error } = await supabase
+      // בדיקה אם עמודת event_id קיימת
+      const { data: testData, error: testError } = await supabase
         .from('equipment_tracking')
-        .update({ event_id: eventId })
-        .in('id', selectedItems);
+        .select('event_id')
+        .limit(1);
 
-      if (error) {
-        console.error('Error updating items:', error);
+      if (testError && testError.message && testError.message.includes("column \"event_id\" does not exist")) {
         setAlert({
           open: true,
-          message: 'שגיאה בעדכון הפריטים',
+          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_id',
+          severity: 'error'
+        });
+        return;
+      }
+
+      // ניסיון לעדכן את הפריטים
+      // חלוקת הפריטים לקבוצות של 10 פריטים כדי להימנע ממגבלת אורך URL
+      const batchSize = 10;
+      const batches = [];
+      
+      for (let i = 0; i < selectedItems.length; i += batchSize) {
+        batches.push(selectedItems.slice(i, i + batchSize));
+      }
+      
+      let hasError = false;
+      let columnNotFoundError = false;
+      
+      // עדכון כל קבוצה בנפרד
+      for (const batch of batches) {
+        const { error } = await supabase
+          .from('equipment_tracking')
+          .update({ event_id: eventId })
+          .in('id', batch);
+          
+        if (error) {
+          console.error('Error updating items:', error);
+          hasError = true;
+          
+          // בדיקה אם השגיאה היא שהעמודה לא קיימת
+          if (error.message && (
+              error.message.includes("Could not find the 'event_id' column") || 
+              error.message.includes("column \"event_id\" does not exist")
+          )) {
+            columnNotFoundError = true;
+            break; // אין טעם להמשיך אם העמודה לא קיימת
+          }
+        }
+      }
+      
+      if (columnNotFoundError) {
+        setAlert({
+          open: true,
+          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_id',
+          severity: 'error'
+        });
+        return;
+      }
+      
+      if (hasError) {
+        setAlert({
+          open: true,
+          message: 'שגיאה בעדכון חלק מהפריטים',
           severity: 'error'
         });
         return;
@@ -563,6 +656,7 @@ function EquipmentTracker() {
 
       // איפוס הבחירה
       setSelectedItems([]);
+      setSelectAllVisible(false);
       handleCloseBulkEdit();
       fetchEquipment();
     } catch (error) {
@@ -583,13 +677,31 @@ function EquipmentTracker() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           {selectedItems.length > 0 && (
+            <>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleOpenBulkEdit}
+                startIcon={<EditIcon />}
+              >
+                עריכה מרובה ({selectedItems.length})
+              </Button>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleDeselectAll}
+              >
+                בטל בחירה
+              </Button>
+            </>
+          )}
+          {selectAllVisible && selectedItems.length === 0 && (
             <Button
-              variant="contained"
+              variant="outlined"
               color="primary"
-              onClick={handleOpenBulkEdit}
-              startIcon={<EditIcon />}
+              onClick={() => handleSelectAll()}
             >
-              עריכה מרובה ({selectedItems.length})
+              סמן הכל
             </Button>
           )}
           <Button
@@ -646,7 +758,20 @@ function EquipmentTracker() {
                   }}
                   onClick={() => toggleEventExpand(group.id)}
                 >
-                  <TableCell padding="checkbox"></TableCell>
+                  <TableCell padding="checkbox">
+                    {expandedEvents[group.id] && (
+                      <IconButton 
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectAll(group.id);
+                        }}
+                        title="סמן את כל הפריטים בקבוצה זו"
+                      >
+                        <CheckBoxOutlineBlankIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </TableCell>
                   <TableCell colSpan={8} sx={{ fontWeight: 'bold' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       {expandedEvents[group.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
