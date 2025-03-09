@@ -1,5 +1,6 @@
 import { toast } from 'react-toastify';
 import { Button } from '@mui/material';
+import { isSameDay } from 'date-fns';
 import 'react-toastify/dist/ReactToastify.css';
 
 // קונפיגורציה בסיסית להתראות
@@ -169,15 +170,15 @@ export const showNewTaskNotification = async (task) => {
 };
 
 // התראה על הוספת תת-משימה חדשה
-export const showNewSubtaskNotification = async (parentTask, subtask) => {
-  const message = `📌 נוספה תת-משימה חדשה\nלמשימה: ${parentTask.title}\nתת-משימה: ${subtask.title}`;
+export const showNewSubtaskNotification = async (parentTask, subtaskTitle) => {
+  const message = `📌 נוספה תת-משימה חדשה\nלמשימה: ${parentTask.title}\nתת-משימה: ${subtaskTitle}`;
 
   // התראה בתוך האפליקציה
   toast.success(
     <div>
       <h4>📌 נוספה תת-משימה חדשה</h4>
       <p><strong>למשימה:</strong> {parentTask.title}</p>
-      <p><strong>תת-משימה:</strong> {subtask.title}</p>
+      <p><strong>תת-משימה:</strong> {subtaskTitle}</p>
     </div>,
     toastConfig
   );
@@ -192,42 +193,29 @@ export const checkUpcomingItems = async (tasks, events) => {
   const sevenDaysFromNow = new Date(today);
   sevenDaysFromNow.setDate(today.getDate() + 7);
   
-  // פונקציה לבדיקה אם שני תאריכים הם באותו יום
-  const isSameDay = (date1, date2) => {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-  };
-
-  // פונקציה לבדיקה אם תאריך הוא בעוד 7 ימים
-  const isInSevenDays = (dateStr) => {
-    const date = new Date(dateStr);
-    return isSameDay(date, sevenDaysFromNow);
-  };
-
   // בדיקת משימות
   tasks?.forEach(task => {
-    if (task.due_date && isInSevenDays(task.due_date)) {
+    if (task.due_date && isSameDay(new Date(task.due_date), sevenDaysFromNow)) {
       showUpcomingTaskNotification(task);
     }
   });
 
   // בדיקת אירועים
   events?.forEach(event => {
-    if (event.start_date && isInSevenDays(event.start_date)) {
+    if (event.start_date && isSameDay(new Date(event.start_date), sevenDaysFromNow)) {
       showUpcomingDepartmentEventNotification(event);
     }
   });
 };
 
 // בדיקת התראות מותאמות אישית
-export const checkCustomNotifications = async (supabase) => {
+export const checkCustomNotifications = async (supabaseClient) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) return;
 
     const now = new Date();
-    const { data: notifications, error } = await supabase
+    const { data: notifications, error } = await supabaseClient
       .from('task_notifications')
       .select(`
         *,
@@ -367,11 +355,4 @@ export const showCustomNotification = async (task, notification) => {
       ]
     });
   }
-};
-
-// פונקציה לבדיקה אם שני תאריכים הם באותו יום
-const isSameDay = (date1, date2) => {
-  return date1.getFullYear() === date2.getFullYear() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getDate() === date2.getDate();
 };
