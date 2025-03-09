@@ -54,7 +54,8 @@ function EquipmentTracker() {
     borrower_name: '',
     notes: '',
     signature: null,
-    event_id: '' // מזהה אירוע
+    event_id: '', // מזהה אירוע
+    new_event_name: '' // שם אירוע חדש
   });
   const [errors, setErrors] = useState({});
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
@@ -67,6 +68,7 @@ function EquipmentTracker() {
   const [selectedItems, setSelectedItems] = useState([]); // פריטים שנבחרו לעריכה מרובה
   const [bulkEditOpen, setBulkEditOpen] = useState(false); // דיאלוג עריכה מרובה
   const [bulkEditEvent, setBulkEditEvent] = useState(''); // אירוע שנבחר לעריכה מרובה
+  const [bulkEditNewEventName, setBulkEditNewEventName] = useState(''); // שם אירוע חדש לעריכה מרובה
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -115,6 +117,38 @@ function EquipmentTracker() {
         signature = signatureRef.current.toDataURL();
       }
 
+      // בדיקה אם נוצר אירוע חדש
+      let eventId = newItem.event_id;
+      if (newItem.new_event_name && newItem.new_event_name.trim() !== '') {
+        // יצירת אירוע חדש
+        const { data: newEvent, error: eventError } = await supabase
+          .from('events')
+          .insert({
+            title: newItem.new_event_name.trim(),
+            start_date: new Date().toISOString().split('T')[0],
+            end_date: new Date().toISOString().split('T')[0],
+            event_type: 'אחר',
+            created_at: new Date().toISOString()
+          })
+          .select();
+
+        if (eventError) {
+          console.error('Error creating new event:', eventError);
+          setAlert({
+            open: true,
+            message: 'שגיאה ביצירת אירוע חדש',
+            severity: 'error'
+          });
+          return;
+        }
+
+        if (newEvent && newEvent.length > 0) {
+          eventId = newEvent[0].id;
+          // עדכון רשימת האירועים
+          fetchEvents();
+        }
+      }
+
       if (newItem.id) {
         // עדכון פריט קיים
         const { error } = await supabase
@@ -127,7 +161,7 @@ function EquipmentTracker() {
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_id: newItem.event_id || null
+            event_id: eventId || null
           })
           .eq('id', newItem.id);
 
@@ -158,7 +192,7 @@ function EquipmentTracker() {
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_id: newItem.event_id || null
+            event_id: eventId || null
           });
 
         if (error) {
@@ -201,7 +235,8 @@ function EquipmentTracker() {
       borrower_name: '',
       notes: '',
       signature: null,
-      event_id: ''
+      event_id: '',
+      new_event_name: ''
     });
     if (signatureRef.current) {
       signatureRef.current.clear();
@@ -414,20 +449,18 @@ function EquipmentTracker() {
     if (!newItem.item_name || newItem.item_name.trim() === '') {
       errors.item_name = 'שם הפריט נדרש';
     }
-    if (!newItem.quantity || newItem.quantity < 1) {
-      errors.quantity = 'כמות חייבת להיות לפחות 1';
+    if (!newItem.borrower_name || newItem.borrower_name.trim() === '') {
+      errors.borrower_name = 'שם השואל נדרש';
+    }
+    if (!newItem.staff_member || newItem.staff_member.trim() === '') {
+      errors.staff_member = 'שם איש הצוות נדרש';
     }
     if (!newItem.checkout_date) {
       errors.checkout_date = 'תאריך משיכה נדרש';
     }
-    if (!newItem.staff_member || newItem.staff_member.trim() === '') {
-      errors.staff_member = 'שם איש צוות נדרש';
+    if (newItem.event_id === 'new' && (!newItem.new_event_name || newItem.new_event_name.trim() === '')) {
+      errors.new_event_name = 'שם האירוע החדש נדרש';
     }
-    if (!newItem.borrower_name || newItem.borrower_name.trim() === '') {
-      errors.borrower_name = 'שם השואל נדרש';
-    }
-    
-    setErrors(errors);
     return errors;
   };
 
@@ -459,23 +492,57 @@ function EquipmentTracker() {
   const handleCloseBulkEdit = () => {
     setBulkEditOpen(false);
     setBulkEditEvent('');
+    setBulkEditNewEventName('');
   };
 
   // פונקציה לשמירת עריכה מרובה
   const handleSaveBulkEdit = async () => {
     try {
-      if (!bulkEditEvent) {
+      if (bulkEditEvent === '' && (!bulkEditNewEventName || bulkEditNewEventName.trim() === '')) {
         setAlert({
           open: true,
-          message: 'יש לבחור אירוע',
+          message: 'יש לבחור אירוע או להזין שם לאירוע חדש',
           severity: 'warning'
         });
         return;
       }
 
+      let eventId = bulkEditEvent;
+
+      // אם נבחר להוסיף אירוע חדש
+      if (bulkEditEvent === 'new' && bulkEditNewEventName && bulkEditNewEventName.trim() !== '') {
+        // יצירת אירוע חדש
+        const { data: newEvent, error: eventError } = await supabase
+          .from('events')
+          .insert({
+            title: bulkEditNewEventName.trim(),
+            start_date: new Date().toISOString().split('T')[0],
+            end_date: new Date().toISOString().split('T')[0],
+            event_type: 'אחר',
+            created_at: new Date().toISOString()
+          })
+          .select();
+
+        if (eventError) {
+          console.error('Error creating new event:', eventError);
+          setAlert({
+            open: true,
+            message: 'שגיאה ביצירת אירוע חדש',
+            severity: 'error'
+          });
+          return;
+        }
+
+        if (newEvent && newEvent.length > 0) {
+          eventId = newEvent[0].id;
+          // עדכון רשימת האירועים
+          fetchEvents();
+        }
+      }
+
       const { error } = await supabase
         .from('equipment_tracking')
-        .update({ event_id: bulkEditEvent })
+        .update({ event_id: eventId })
         .in('id', selectedItems);
 
       if (error) {
@@ -695,8 +762,23 @@ function EquipmentTracker() {
                 {events.map((event) => (
                   <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
                 ))}
+                <MenuItem value="new" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  הוסף אירוע חדש...
+                </MenuItem>
               </Select>
             </FormControl>
+
+            {newItem.event_id === 'new' && (
+              <TextField
+                label="שם האירוע החדש"
+                fullWidth
+                value={newItem.new_event_name}
+                onChange={(e) => setNewItem({ ...newItem, new_event_name: e.target.value })}
+                error={!!errors.new_event_name}
+                helperText={errors.new_event_name}
+                sx={{ mb: 2 }}
+              />
+            )}
 
             <TextField
               label="שם הפריט"
@@ -794,8 +876,21 @@ function EquipmentTracker() {
                 {events.map((event) => (
                   <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
                 ))}
+                <MenuItem value="new" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  הוסף אירוע חדש...
+                </MenuItem>
               </Select>
             </FormControl>
+
+            {bulkEditEvent === 'new' && (
+              <TextField
+                label="שם האירוע החדש"
+                fullWidth
+                value={bulkEditNewEventName}
+                onChange={(e) => setBulkEditNewEventName(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
