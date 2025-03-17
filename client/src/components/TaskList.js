@@ -1,58 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
-  Typography,
-  IconButton,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
   TextField,
+  Typography,
   MenuItem,
-  Grid,
-  Card,
-  CardContent,
+  IconButton,
   List,
   ListItem,
   ListItemText,
-  Checkbox,
-  Chip,
-  Alert,
-  CircularProgress,
-  Avatar,
-  AvatarGroup,
-  Tooltip,
-  Select,
   FormControl,
   InputLabel,
-  OutlinedInput
+  Select,
+  InputAdornment,
+  Paper,
+  Grid,
+  Chip,
+  CircularProgress,
+  Tooltip,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
+  Alert,
+  Avatar
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Event as EventIcon,
-  Person as PersonIcon,
-  Notifications as NotificationsIcon,
-  Search as SearchIcon,
-  CheckCircle as CheckCircleIcon,
-  RadioButtonUnchecked as RadioButtonUncheckedIcon
-} from '@mui/icons-material';
-import { supabase } from '../supabaseClient';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import ErrorIcon from '@mui/icons-material/Error';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import SearchIcon from '@mui/icons-material/Search';
+import EventIcon from '@mui/icons-material/Event';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import ExportButtons from './ExportButtons';
+import { supabase } from '../supabaseClient';
 import { 
   showNewTaskNotification, 
   showNewSubtaskNotification,
-  checkCustomNotifications,
-  showCustomNotification 
+  showTaskStatusChangeNotification,
+  showCustomNotification,
+  checkCustomNotifications 
 } from '../services/notificationService';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 const TASK_STATUS = {
   TODO: 'לביצוע',
@@ -109,7 +110,7 @@ const teamMembersData = [
   { id: 'team-7', name: 'טל שני', role: 'רכז אשכול דרום', email: 'darommta@gmail.com', phone: '052-6178480' },
   { id: 'team-8', name: 'חן סגי בליך', role: 'רכזת תוכנית להב"ה', email: 'chensagi289@gmail.com', phone: '054-5897291' },
   { id: 'team-9', name: 'נעם גולובטי', role: 'מנהלת רשותית הרשות לביטחון קהילתי', email: 'harashutbk@mta.org.il', phone: '054-9732663' },
-  { id: 'team-10', name: 'לי הרמן', role: 'רכזת תחום ילדים - להב"ה', email: 'leeherman90@gmail.com', phone: '054-5652341' },
+  { id: 'team-10', name: 'לי הרמן', role: 'רכזת קומונת שמרת', email: 'leeherman90@gmail.com', phone: '054-5652341' },
   { id: 'team-11', name: 'אוריין כפרי', role: 'רכזת מיניות בריאה', email: 'oriancafri26@gmail.com', phone: '050-7844474' },
   { id: 'team-12', name: 'ענת בן צבי', role: 'רכזת מרחבים בטוחים', email: 'anatbz11@gmail.com', phone: '054-6904888' },
   { id: 'team-13', name: 'בר יערי', role: 'רכזת תוכנית דילר', email: 'diller.matteasher@gmail.com', phone: '052-6218216' },
@@ -132,7 +133,6 @@ const sampleTasks = [
     title: 'תיאום פעילות קיץ לנוער',
     description: 'תיאום פעילויות קיץ לבני נוער במטה אשר, כולל סדנאות, טיולים ופעילויות העשרה',
     status: 'TODO',
-    priority: 'HIGH',
     due_date: new Date(Date.now() + 15 * 86400000).toISOString(), // 15 ימים מהיום
     subtasks: [
       { title: 'תיאום מדריכים', completed: true },
@@ -147,7 +147,6 @@ const sampleTasks = [
     title: 'ישיבת צוות חודשית',
     description: 'ישיבת צוות של המחלקה לחינוך בלתי פורמלי לסיכום החודש ותכנון החודש הבא',
     status: 'IN_PROGRESS',
-    priority: 'MEDIUM',
     due_date: new Date(Date.now() + 3 * 86400000).toISOString(), // 3 ימים מהיום
     subtasks: [
       { title: 'הכנת מצגת', completed: true },
@@ -162,7 +161,6 @@ const sampleTasks = [
     title: 'ארגון טיול שנתי',
     description: 'ארגון הטיול השנתי לבני הנוער באזור הצפון, כולל תיאום הסעות, מדריכים ופעילויות',
     status: 'TODO',
-    priority: 'HIGH',
     due_date: new Date(Date.now() + 30 * 86400000).toISOString(), // חודש מהיום
     subtasks: [
       { title: 'בחירת מסלול', completed: true },
@@ -178,7 +176,6 @@ const sampleTasks = [
     title: 'הכנת תקציב שנתי',
     description: 'הכנת התקציב השנתי למחלקה לחינוך בלתי פורמלי',
     status: 'DONE',
-    priority: 'MEDIUM',
     due_date: new Date(Date.now() - 10 * 86400000).toISOString(), // 10 ימים לפני היום
     subtasks: [
       { title: 'איסוף נתונים מהשנה הקודמת', completed: true },
@@ -193,7 +190,6 @@ const sampleTasks = [
     title: 'פיתוח תוכנית חדשה לנוער בסיכון',
     description: 'פיתוח תוכנית חדשה לעבודה עם נוער בסיכון באזור מטה אשר',
     status: 'IN_PROGRESS',
-    priority: 'HIGH',
     due_date: new Date(Date.now() + 45 * 86400000).toISOString(), // 45 ימים מהיום
     subtasks: [
       { title: 'מיפוי צרכים', completed: true },
@@ -209,6 +205,7 @@ const sampleTasks = [
 const TaskList = ({ user }) => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [taskDialog, setTaskDialog] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
@@ -218,7 +215,7 @@ const TaskList = ({ user }) => {
     customType: '',
     date: null,
     subtasks: [],
-    owner: ''
+    owner: null
   });
   const [teamMembers, setTeamMembers] = useState([]);
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(false);
@@ -226,9 +223,6 @@ const TaskList = ({ user }) => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [newSubtask, setNewSubtask] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [taskToDelete, setTaskToDelete] = useState(null);
-  const [error, setError] = useState(null);
   const [selectedNotificationTask, setSelectedNotificationTask] = useState(null);
   const [selectedSubtaskIndex, setSelectedSubtaskIndex] = useState(null);
   const [notificationDialog, setNotificationDialog] = useState(false);
@@ -236,102 +230,115 @@ const TaskList = ({ user }) => {
     type: 'before_due',
     days_before: 1,
     notify_date: null,
-    status: 'DONE',
-    notification_method: 'email',
-    repeat: 'once',
-    enabled: true
+    notify_on_status: null
   });
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        setError('שגיאה בטעינת המשתמש');
+      }
+    };
+
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      try {
+        setLoadingTeamMembers(true);
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          setTeamMembers(teamMembersData);
+          return;
+        }
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('email');
+        
+        if (error) {
+          console.error('Error fetching profiles:', error);
+          setTeamMembers(teamMembersData);
+          return;
+        }
+        
+        const processedData = data?.map(profile => ({
+          id: profile.id,
+          name: profile.name || profile.email?.split('@')[0] || 'משתמש',
+          email: profile.email,
+          role: profile.role || 'משתמש'
+        })) || [];
+        
+        console.log('Loaded team members:', processedData);
+        
+        if (processedData.length === 0) {
+          setTeamMembers(teamMembersData);
+        } else {
+          setTeamMembers(processedData);
+        }
+      } catch (error) {
+        console.error('Error fetching team members:', error);
+        setTeamMembers(teamMembersData);
+      } finally {
+        setLoadingTeamMembers(false);
+      }
+    };
+
+    fetchTeamMembers();
+  }, []);
 
   useEffect(() => {
     const loadTasks = async () => {
       try {
         setLoading(true);
+        setError(null);
         
-        // בדיקה אם יש חיבור לסופאבייס
-        let session;
-        try {
-          const { data } = await supabase.auth.getSession();
-          session = data.session;
-        } catch (err) {
-          console.error('Error getting session:', err);
-          session = null;
-        }
+        const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          // אם אין משתמש מחובר, נציג משימות לדוגמה במקום
           setTasks(sampleTasks);
           setError('אין חיבור לשרת. מוצגות משימות לדוגמה.');
           return;
         }
         
-        try {
-          // שינוי השאילתה כדי להימנע מבעיות ביחסים בין טבלאות
-          const { data, error } = await supabase
-            .from('tasks')
-            .select('*')
-            .order('created_at', { ascending: false });
-          
-          if (error) {
-            console.error('Error in Supabase query:', error);
-            setTasks(sampleTasks);
-            setError('שגיאה בטעינת המשימות. מוצגות משימות לדוגמה.');
-            return;
-          }
-          
-          // אם אין נתונים, נציג משימות לדוגמה
-          if (!data || data.length === 0) {
-            setTasks(sampleTasks);
-            setError('לא נמצאו משימות. מוצגות משימות לדוגמה.');
-            return;
-          }
-          
-          // אם יש נתונים, ננסה להשלים מידע על הבעלים בנפרד
-          if (data && data.length > 0) {
-            // יצירת מיפוי של מזהי משתמשים ייחודיים
-            const ownerIds = [...new Set(data.filter(task => task.owner_id).map(task => task.owner_id))];
-            
-            if (ownerIds.length > 0) {
-              try {
-                const { data: ownersData, error: ownersError } = await supabase
-                  .from('profiles')
-                  .select('id, email');
-                
-                if (!ownersError && ownersData) {
-                  // יצירת מיפוי של מזהי משתמשים למידע שלהם
-                  const ownersMap = {};
-                  ownersData.forEach(owner => {
-                    ownersMap[owner.id] = owner;
-                  });
-                  
-                  // הוספת מידע על הבעלים לכל משימה
-                  data.forEach(task => {
-                    if (task.owner_id && ownersMap[task.owner_id]) {
-                      task.owner = {
-                        ...ownersMap[task.owner_id],
-                        name: ownersMap[task.owner_id].name || ownersMap[task.owner_id].email?.split('@')[0] || 'משתמש'
-                      };
-                    }
-                  });
-                }
-              } catch (err) {
-                console.error('Error fetching owners:', err);
-              }
-            }
-          }
-          
-          console.log('Loaded tasks:', data);
-          setTasks(data);
-          setError(null);
-        } catch (err) {
-          console.error('Error fetching tasks:', err);
+        const { data, error: tasksError } = await supabase
+          .from('tasks')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (tasksError) {
+          console.error('Error fetching tasks:', tasksError);
           setTasks(sampleTasks);
           setError('שגיאה בטעינת המשימות. מוצגות משימות לדוגמה.');
+          return;
         }
+        
+        if (!data || data.length === 0) {
+          setTasks(sampleTasks);
+          setError('לא נמצאו משימות. מוצגות משימות לדוגמה.');
+          return;
+        }
+        
+        console.log('Loaded tasks:', data);
+        
+        // בדיקת המבנה של המשימות הקיימות
+        console.log('Task structure:', Object.keys(data[0]));
+        console.log('First task:', data[0]);
+        
+        setTasks(data);
+        
       } catch (error) {
-        console.error('שגיאה בטעינת משימות:', error);
-        toast.error('שגיאה בטעינת המשימות');
-        setError('שגיאה בטעינת המשימות. נסה שוב מאוחר יותר.');
+        console.error('Error:', error);
         setTasks(sampleTasks);
+        setError('שגיאה בטעינת המשימות. מוצגות משימות לדוגמה.');
       } finally {
         setLoading(false);
       }
@@ -345,57 +352,37 @@ const TaskList = ({ user }) => {
       try {
         setLoadingTeamMembers(true);
         
-        // בדיקה אם יש חיבור לסופאבייס
-        let session;
-        try {
-          const { data } = await supabase.auth.getSession();
-          session = data.session;
-        } catch (err) {
-          console.error('Error getting session:', err);
-          session = null;
-        }
+        const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          // אם אין משתמש מחובר, נציג את צוות המתנ"ס במקום
           setTeamMembers(teamMembersData);
           return;
         }
         
-        try {
-          // שינוי השאילתה כדי להתמודד עם העדר עמודת name
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('id, email');
-
-          if (error) {
-            console.error('Error fetching profiles:', error);
-            // נציג את צוות המתנ"ס במקרה של שגיאה
-            setTeamMembers(teamMembersData);
-            return;
-          }
-          
-          // הוספת שדה name מתוך האימייל אם הוא לא קיים
-          const processedData = data?.map(profile => ({
-            ...profile,
-            name: profile.name || profile.email?.split('@')[0] || 'משתמש'
-          })) || [];
-          
-          console.log('Loaded team members:', processedData);
-          
-          if (processedData.length === 0) {
-            // אם אין נתונים, נציג את צוות המתנ"ס
-            setTeamMembers(teamMembersData);
-          } else {
-            setTeamMembers(processedData);
-          }
-        } catch (err) {
-          console.error('Error fetching profiles:', err);
-          // נציג את צוות המתנ"ס במקרה של שגיאה
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email');
+        
+        if (error) {
+          console.error('Error fetching profiles:', error);
           setTeamMembers(teamMembersData);
+          return;
+        }
+        
+        const processedData = data?.map(profile => ({
+          ...profile,
+          name: profile.name || profile.email?.split('@')[0] || 'משתמש'
+        })) || [];
+        
+        console.log('Loaded team members:', processedData);
+        
+        if (processedData.length === 0) {
+          setTeamMembers(teamMembersData);
+        } else {
+          setTeamMembers(processedData);
         }
       } catch (error) {
         console.error('Error fetching team members:', error);
-        // נציג את צוות המתנ"ס במקרה של שגיאה
         setTeamMembers(teamMembersData);
       } finally {
         setLoadingTeamMembers(false);
@@ -414,10 +401,8 @@ const TaskList = ({ user }) => {
       }
     };
 
-    // בדיקה ראשונית
     checkNotifications();
 
-    // בדיקה כל דקה
     const interval = setInterval(checkNotifications, 60 * 1000);
 
     return () => clearInterval(interval);
@@ -428,7 +413,6 @@ const TaskList = ({ user }) => {
 
     const { source, destination } = result;
     
-    // אם אין שינוי במיקום, לא עושים כלום
     if (
       source.droppableId === destination.droppableId &&
       source.index === destination.index
@@ -437,11 +421,9 @@ const TaskList = ({ user }) => {
     }
 
     try {
-      // מעדכנים את הסטטוס בבסיס הנתונים
       const taskId = result.draggableId;
       const newStatus = destination.droppableId;
 
-      // עדכון מקומי לפני העדכון בשרת
       const updatedTasks = [...tasks];
       const taskIndex = updatedTasks.findIndex(t => t.id.toString() === taskId);
       
@@ -453,7 +435,6 @@ const TaskList = ({ user }) => {
         setTasks(updatedTasks);
       }
 
-      // עדכון בשרת
       const { error } = await supabase
         .from('tasks')
         .update({ status: newStatus })
@@ -461,7 +442,6 @@ const TaskList = ({ user }) => {
 
       if (error) throw error;
 
-      // בדיקת התראות על שינוי סטטוס
       const { data: notifications } = await supabase
         .from('task_notifications')
         .select('*')
@@ -476,7 +456,6 @@ const TaskList = ({ user }) => {
 
     } catch (error) {
       console.error('שגיאה בעדכון סטטוס משימה:', error);
-      // במקרה של שגיאה, מחזירים את המצב הקודם
       const { data } = await supabase.from('tasks').select('*');
       if (data) {
         setTasks(data);
@@ -488,63 +467,69 @@ const TaskList = ({ user }) => {
     return tasks.filter(task => task.status === status);
   };
 
-  const handleSaveTask = async () => {
-    if (!newTask.title.trim()) {
-      setError('יש למלא כותרת למשימה');
+  const handleSaveTask = async (taskToSave = null) => {
+    const taskData = taskToSave || newTask;
+    
+    if (!taskData?.title?.trim()) {
+      toast.error('נא למלא כותרת משימה');
       return;
     }
 
     try {
       setLoading(true);
-      setError(null);
+      const { data: { session } } = await supabase.auth.getSession();
       
-      const taskData = {
-        title: newTask.title.trim(),
-        description: newTask.description.trim(),
-        status: newTask.status,
-        type: newTask.type === 'אחר' ? newTask.customType : newTask.type,
-        date: newTask.date ? new Date(newTask.date).toISOString() : null,
-        due_date: newTask.date ? new Date(newTask.date).toISOString() : null,
-        subtasks: newTask.subtasks || [],
-        owner_id: newTask.owner || null,
-        user_id: user.id,
+      if (!session?.user?.id) {
+        toast.error('לא ניתן להוסיף משימה - המשתמש לא מחובר');
+        return;
+      }
+
+      const finalTaskData = {
+        title: taskData.title.trim(),
+        description: taskData.description?.trim() || '',
+        status: taskData.status || 'TODO',
+        type: taskData.type === 'אחר' ? taskData.customType?.trim() : taskData.type,
+        date: taskData.date ? new Date(taskData.date).toISOString() : null,
+        due_date: taskData.date ? new Date(taskData.date).toISOString() : null,
+        subtasks: taskData.subtasks || [],
+        owner: taskData.owner || null,
+        user_id: session.user.id,
         created_at: new Date().toISOString()
       };
-      
+
       let result;
-      
       if (editingTaskId) {
-        // Update existing task
         const { data, error } = await supabase
           .from('tasks')
-          .update(taskData)
+          .update(finalTaskData)
           .eq('id', editingTaskId)
           .select();
           
-        if (error) throw error;
+        if (error) {
+          console.error('Error updating task:', error);
+          throw error;
+        }
         result = data[0];
-        
-        // Update local state
-        setTasks(prevTasks => 
-          prevTasks.map(task => 
-            task.id === editingTaskId ? { ...task, ...result } : task
-          )
-        );
+        setTasks(prevTasks => prevTasks.map(task => task.id === editingTaskId ? result : task));
+        toast.success('המשימה עודכנה בהצלחה');
       } else {
-        // Create new task
         const { data, error } = await supabase
           .from('tasks')
-          .insert([taskData])
+          .insert([finalTaskData])
           .select();
           
-        if (error) throw error;
+        if (error) {
+          console.error('Error inserting task:', error);
+          throw error;
+        }
         result = data[0];
-        
-        // Update local state
-        setTasks(prevTasks => [...prevTasks, result]);
+        setTasks(prevTasks => [result, ...prevTasks]);
+        toast.success('המשימה נוספה בהצלחה');
+
+        // הצגת התראה על משימה חדשה
+        showNewTaskNotification(result);
       }
-      
-      // Reset form
+
       setNewTask({
         title: '',
         description: '',
@@ -553,16 +538,13 @@ const TaskList = ({ user }) => {
         customType: '',
         date: null,
         subtasks: [],
-        owner: ''
+        owner: null
       });
       setEditingTaskId(null);
-      setTaskDialog(false);
-      
-      // Show success message
-      toast.success(editingTaskId ? 'המשימה עודכנה בהצלחה' : 'המשימה נוספה בהצלחה');
+      setOpenDialog(false);
     } catch (error) {
       console.error('Error saving task:', error);
-      setError('אירעה שגיאה בשמירת המשימה');
+      toast.error('שגיאה בשמירת המשימה');
     } finally {
       setLoading(false);
     }
@@ -580,7 +562,6 @@ const TaskList = ({ user }) => {
         
       if (error) throw error;
       
-      // עדכון הרשימה המקומית
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === taskId ? { ...task, ...updatedFields } : task
@@ -596,34 +577,8 @@ const TaskList = ({ user }) => {
     }
   };
 
-  const handleDeleteClick = (taskId) => {
-    setTaskToDelete(taskId);
-    setDeleteConfirmOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!taskToDelete) return;
-
-    try {
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', taskToDelete);
-
-      if (error) throw error;
-
-      setTasks(tasks.filter(task => task.id !== taskToDelete));
-    } catch (error) {
-      console.error('Error deleting task:', error);
-    } finally {
-      setDeleteConfirmOpen(false);
-      setTaskToDelete(null);
-    }
-  };
-
   const handleToggleSubtask = async (taskId, subtaskIndex) => {
     try {
-      // עדכון המצב המקומי
       const updatedTasks = [...tasks];
       const taskIndex = updatedTasks.findIndex(t => t.id === taskId);
       
@@ -632,22 +587,18 @@ const TaskList = ({ user }) => {
       const task = updatedTasks[taskIndex];
       const subtasks = [...task.subtasks];
       
-      // בדיקה אם תת-המשימה היא מחרוזת או אובייקט
       if (typeof subtasks[subtaskIndex] === 'string') {
-        // אם זו מחרוזת, נמיר אותה לאובייקט
         subtasks[subtaskIndex] = {
           title: subtasks[subtaskIndex],
           completed: true
         };
       } else {
-        // אם זה אובייקט, נהפוך את המצב
         subtasks[subtaskIndex] = {
           ...subtasks[subtaskIndex],
           completed: !subtasks[subtaskIndex].completed
         };
       }
       
-      // עדכון המשימה עם תתי-המשימות המעודכנות
       updatedTasks[taskIndex] = {
         ...task,
         subtasks
@@ -655,7 +606,6 @@ const TaskList = ({ user }) => {
       
       setTasks(updatedTasks);
       
-      // עדכון בסופאבייס
       if (taskId.startsWith('sample-')) return; // לא מעדכנים משימות לדוגמה
       
       const { error } = await supabase
@@ -698,73 +648,118 @@ const TaskList = ({ user }) => {
     }
   };
 
-  const handleAddNotification = async () => {
+  const handleSaveNotification = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) throw new Error('לא נמצא משתמש מחובר');
-
-      // בדיקה שכל השדות הנדרשים קיימים
-      if (!selectedNotificationTask?.id) {
-        throw new Error('לא נבחרה משימה');
-      }
 
       const notification = {
         task_id: selectedNotificationTask.id,
         subtask_index: selectedSubtaskIndex,
         type: newNotification.type,
-        days_before: newNotification.type === 'before_due' ? newNotification.days_before : null,
-        notify_date: newNotification.type === 'on_date' ? newNotification.notify_date?.toISOString() : null,
-        status: newNotification.type === 'on_status' ? newNotification.status : null,
-        notification_method: newNotification.notification_method,
-        repeat: newNotification.repeat,
-        enabled: newNotification.enabled,
+        days_before: newNotification.days_before,
+        notify_date: newNotification.notify_date,
+        notify_on_status: newNotification.notify_on_status,
         user_id: user.id
       };
 
-      // הדפסת הנתונים לבדיקה
-      console.log('Notification data being sent:', notification);
-
-      // בדיקת תקינות נוספת לפי סוג ההתראה
       if (newNotification.type === 'before_due' && !notification.days_before) {
         throw new Error('חובה להזין מספר ימים להתראה');
       }
+
       if (newNotification.type === 'on_date' && !notification.notify_date) {
         throw new Error('חובה לבחור תאריך להתראה');
       }
-      if (newNotification.type === 'on_status' && !notification.status) {
+
+      if (newNotification.type === 'on_status' && !notification.notify_on_status) {
         throw new Error('חובה לבחור סטטוס להתראה');
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('task_notifications')
-        .insert([notification])
-        .select(); // נוסיף select() כדי לקבל את הנתונים שנוספו
+        .insert([notification]);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('Notification added successfully:', data);
-
+      toast.success('ההתראה נשמרה בהצלחה');
       setNotificationDialog(false);
-      setSelectedNotificationTask(null);
-      setSelectedSubtaskIndex(null);
       setNewNotification({
         type: 'before_due',
         days_before: 1,
         notify_date: null,
-        status: 'DONE',
-        notification_method: 'email',
-        repeat: 'once',
-        enabled: true
+        notify_on_status: null
       });
+    } catch (error) {
+      console.error('Error saving notification:', error);
+      toast.error(error.message || 'שגיאה בשמירת ההתראה');
+    }
+  };
+
+  const handleAddNotification = async () => {
+    try {
+      if (!user) throw new Error('לא נמצא משתמש מחובר');
+
+      const notification = {
+        task_id: selectedNotificationTask.id,
+        subtask_index: selectedSubtaskIndex,
+        type: newNotification.type,
+        days_before: newNotification.days_before,
+        notify_date: newNotification.notify_date,
+        notify_on_status: newNotification.notify_on_status,
+        user_id: user.id
+      };
+
+      if (newNotification.type === 'before_due' && !notification.days_before) {
+        throw new Error('חובה להזין מספר ימים להתראה');
+      }
+
+      if (newNotification.type === 'on_date' && !notification.notify_date) {
+        throw new Error('חובה לבחור תאריך להתראה');
+      }
+
+      if (newNotification.type === 'on_status' && !notification.notify_on_status) {
+        throw new Error('חובה לבחור סטטוס להתראה');
+      }
+
+      const { error } = await supabase
+        .from('task_notifications')
+        .insert([notification]);
+
+      if (error) throw error;
 
       toast.success('ההתראה נוספה בהצלחה');
+      setNotificationDialog(false);
+      setNewNotification({
+        type: 'before_due',
+        days_before: 1,
+        notify_date: null,
+        notify_on_status: null
+      });
     } catch (error) {
-      console.error('שגיאה בהוספת התראה:', error);
+      console.error('Error adding notification:', error);
       toast.error(error.message || 'שגיאה בהוספת ההתראה');
+    }
+  };
+
+  const handleDeleteClick = (taskId) => {
+    if (window.confirm('האם למחוק את המשימה?')) {
+      handleDeleteTask(taskId);
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      toast.success('המשימה נמחקה בהצלחה');
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast.error('שגיאה במחיקת המשימה');
     }
   };
 
@@ -783,331 +778,134 @@ const TaskList = ({ user }) => {
     subtasks: task.subtasks || []
   }));
 
-  const TaskDialog = () => (
-    <Dialog
-      open={openDialog}
-      onClose={() => setOpenDialog(false)}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        style: { direction: 'rtl', borderRadius: '12px' }
-      }}
-    >
-      <DialogTitle sx={{ 
-        borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-        pb: 2,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        '& .MuiTypography-root': {
-          fontWeight: 600,
-          color: 'primary.dark',
-        }
-      }}>
-        {selectedTask ? 'עריכת משימה' : 'הוספת משימה חדשה'}
-      </DialogTitle>
-      <DialogContent sx={{ pt: 3 }}>
-        <TextField
-          autoFocus
-          margin="dense"
-          label="כותרת המשימה"
-          type="text"
-          fullWidth
-          value={newTask.title}
-          onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-          InputProps={{ style: { textAlign: 'right' } }}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          margin="dense"
-          label="תיאור המשימה"
-          type="text"
-          fullWidth
-          multiline
-          rows={3}
-          value={newTask.description}
-          onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-          InputProps={{ style: { textAlign: 'right' } }}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          select
-          fullWidth
-          label="סטטוס"
-          value={newTask.status}
-          onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-          sx={{ mb: 2, textAlign: 'right' }}
-          InputProps={{ style: { textAlign: 'right' } }}
-          SelectProps={{ 
-            MenuProps: { 
-              anchorOrigin: { vertical: "bottom", horizontal: "right" },
-              transformOrigin: { vertical: "top", horizontal: "right" }
-            }
-          }}
-        >
-          {Object.entries(TASK_STATUS).map(([key, value]) => (
-            <MenuItem key={key} value={key}>{value}</MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          fullWidth
-          label="סוג"
-          value={newTask.type}
-          onChange={(e) => setNewTask({ ...newTask, type: e.target.value })}
-          sx={{ mb: 2, textAlign: 'right' }}
-          InputProps={{ style: { textAlign: 'right' } }}
-          SelectProps={{ 
-            MenuProps: { 
-              anchorOrigin: { vertical: "bottom", horizontal: "right" },
-              transformOrigin: { vertical: "top", horizontal: "right" }
-            }
-          }}
-        >
-          {eventTypes.map((type) => (
-            <MenuItem key={type} value={type}>{type}</MenuItem>
-          ))}
-        </TextField>
-        {newTask.type === 'אחר' && (
+  const TaskDialog = () => {
+    const defaultTask = {
+      title: '',
+      description: '',
+      status: 'TODO',
+      type: 'משימה',
+      customType: '',
+      date: null,
+      subtasks: []
+    };
+
+    const [localTask, setLocalTask] = useState(defaultTask);
+    const [localSubtask, setLocalSubtask] = useState('');
+
+    useEffect(() => {
+      if (selectedTask) {
+        setLocalTask({ ...selectedTask });
+      } else {
+        setLocalTask(defaultTask);
+      }
+    }, [selectedTask]);
+
+    const handleLocalTaskChange = (field, value) => {
+      setLocalTask(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSave = () => {
+      const title = localTask?.title?.trim();
+      if (!title) {
+        toast.error('יש למלא כותרת למשימה');
+        return;
+      }
+      
+      const taskToSave = {
+        ...localTask,
+        title: title,
+        description: localTask.description?.trim() || '',
+        status: localTask.status || 'TODO',
+        type: localTask.type || 'משימה',
+        date: localTask.date,
+        subtasks: localTask.subtasks || [],
+        owner: localTask.owner || null
+      };
+      
+      handleSaveTask(taskToSave);
+    };
+
+    const handleAddSubtask = () => {
+      if (!localSubtask.trim()) return;
+      
+      setLocalTask(prev => ({
+        ...prev,
+        subtasks: [...(prev.subtasks || []), { title: localSubtask.trim(), completed: false }]
+      }));
+      setLocalSubtask('');
+    };
+
+    const handleRemoveSubtask = (index) => {
+      setLocalTask(prev => ({
+        ...prev,
+        subtasks: prev.subtasks.filter((_, i) => i !== index)
+      }));
+    };
+
+    return (
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          style: { direction: 'rtl' }
+        }}
+      >
+        <DialogTitle sx={{ 
+          borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
+          pb: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          '& .MuiTypography-root': {
+            fontWeight: 600,
+            color: 'primary.dark',
+          }
+        }}>
+          {selectedTask ? 'עריכת משימה' : 'הוספת משימה חדשה'}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
           <TextField
+            autoFocus
             margin="dense"
-            label="סוג מותאם אישית"
+            required
+            label="כותרת המשימה *"
             type="text"
             fullWidth
-            value={newTask.customType}
-            onChange={(e) => setNewTask({ ...newTask, customType: e.target.value })}
+            value={localTask?.title || ''}
+            onChange={(e) => handleLocalTaskChange('title', e.target.value)}
+            error={!localTask?.title?.trim()}
+            helperText={!localTask?.title?.trim() ? 'יש למלא כותרת למשימה' : ''}
+            InputProps={{ 
+              style: { textAlign: 'right' },
+              startAdornment: !localTask?.title?.trim() && (
+                <InputAdornment position="start">
+                  <ErrorIcon color="error" fontSize="small" />
+                </InputAdornment>
+              )
+            }}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="תיאור המשימה"
+            type="text"
+            fullWidth
+            multiline
+            rows={3}
+            value={localTask.description}
+            onChange={(e) => handleLocalTaskChange('description', e.target.value)}
             InputProps={{ style: { textAlign: 'right' } }}
             sx={{ mb: 2 }}
           />
-        )}
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <DatePicker
-            label="תאריך יעד"
-            value={newTask.date}
-            onChange={(date) => setNewTask({ ...newTask, date })}
-            sx={{ mb: 2, width: '100%' }}
-            slotProps={{
-              textField: {
-                InputProps: { style: { textAlign: 'right' } },
-                fullWidth: true
-              }
-            }}
-          />
-        </LocalizationProvider>
-        <FormControl sx={{ width: '100%', mb: 2 }}>
-          <InputLabel id="task-owner-label">אחראי</InputLabel>
-          <Select
-            labelId="task-owner-label"
-            id="task-owner-select"
-            value={newTask.owner || ''}
-            onChange={(e) => setNewTask({ ...newTask, owner: e.target.value })}
-            input={<OutlinedInput label="אחראי" />}
-          >
-            <MenuItem value="">ללא</MenuItem>
-            {loadingTeamMembers ? (
-              <MenuItem disabled>
-                <CircularProgress size={20} />
-                &nbsp;טוען משתמשים...
-              </MenuItem>
-            ) : (
-              teamMembers.map(member => (
-                <MenuItem key={member.id} value={member.id}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Avatar 
-                      sx={{ 
-                        width: 24, 
-                        height: 24,
-                        fontSize: '0.75rem',
-                        bgcolor: 'secondary.main'
-                      }}
-                    >
-                      {member.name?.substring(0, 1).toUpperCase() || '?'}
-                    </Avatar>
-                    {member.name || member.email}
-                  </Box>
-                </MenuItem>
-              ))
-            )}
-          </Select>
-        </FormControl>
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>תתי משימות</Typography>
-          <Box sx={{ display: 'flex', mb: 2 }}>
-            <TextField
-              fullWidth
-              label="הוסף תת משימה"
-              value={newSubtask}
-              onChange={(e) => setNewSubtask(e.target.value)}
-              InputProps={{ style: { textAlign: 'right' } }}
-              sx={{ ml: 1 }}
-            />
-            <Button 
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                if (newSubtask.trim()) {
-                  setNewTask({
-                    ...newTask,
-                    subtasks: [...(newTask.subtasks || []), { title: newSubtask.trim(), completed: false }]
-                  });
-                  setNewSubtask('');
-                }
-              }}
-              sx={{ 
-                borderRadius: '8px',
-                '&:hover': {
-                  backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                }
-              }}
-            >
-              הוסף
-            </Button>
-          </Box>
-          <List dense sx={{ maxHeight: '150px', overflow: 'auto' }}>
-            {newTask.subtasks?.map((subtask, index) => (
-              <ListItem
-                key={index}
-                secondaryAction={
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    onClick={() => {
-                      setNewTask({
-                        ...newTask,
-                        subtasks: newTask.subtasks.filter((_, i) => i !== index)
-                      });
-                    }}
-                    sx={{ 
-                      color: 'text.secondary',
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                      }
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                }
-                sx={{
-                  py: 0.5
-                }}
-              >
-                <ListItemText primary={subtask.title} />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button 
-          onClick={() => setOpenDialog(false)}
-          sx={{ 
-            borderRadius: '8px',
-            color: 'text.secondary',
-            '&:hover': {
-              backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            }
-          }}
-        >
-          ביטול
-        </Button>
-        <Button 
-          variant="contained" 
-          onClick={selectedTask ? () => handleUpdateTask(selectedTask.id, newTask) : handleSaveTask}
-          sx={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 8px rgba(25, 118, 210, 0.2)',
-            '&:hover': {
-              boxShadow: '0 6px 12px rgba(25, 118, 210, 0.3)',
-            }
-          }}
-        >
-          {selectedTask ? 'עדכון' : 'שמירה'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  const DeleteConfirmDialog = () => (
-    <Dialog
-      open={deleteConfirmOpen}
-      onClose={() => setDeleteConfirmOpen(false)}
-      PaperProps={{
-        style: { direction: 'rtl', borderRadius: '12px' }
-      }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'error.main' }}>מחיקת משימה</DialogTitle>
-      <DialogContent>
-        <Typography>האם אתה בטוח שברצונך למחוק את המשימה?</Typography>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button 
-          onClick={() => setDeleteConfirmOpen(false)}
-          sx={{ 
-            borderRadius: '8px',
-            color: 'text.secondary',
-          }}
-        >
-          ביטול
-        </Button>
-        <Button 
-          variant="contained" 
-          color="error" 
-          onClick={handleDeleteConfirm}
-          sx={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 8px rgba(211, 47, 47, 0.2)',
-            '&:hover': {
-              boxShadow: '0 6px 12px rgba(211, 47, 47, 0.3)',
-            }
-          }}
-        >
-          מחיקה
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  const NotificationDialog = () => (
-    <Dialog
-      open={notificationDialog}
-      onClose={() => setNotificationDialog(false)}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        style: { direction: 'rtl', borderRadius: '12px' }
-      }}
-    >
-      <DialogTitle sx={{ 
-        borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-        pb: 2,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1
-      }}>
-        <NotificationsIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>הגדרת התראה חדשה</Typography>
-      </DialogTitle>
-      <DialogContent>
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle2" sx={{ 
-            mb: 2,
-            p: 1.5,
-            backgroundColor: 'rgba(25, 118, 210, 0.04)',
-            borderRadius: '8px',
-            fontWeight: 500
-          }}>
-            משימה: {selectedNotificationTask?.title}
-            {selectedSubtaskIndex !== null && selectedNotificationTask?.subtasks[selectedSubtaskIndex]?.title && 
-              ` > ${selectedNotificationTask?.subtasks[selectedSubtaskIndex].title}`}
-          </Typography>
-          
           <TextField
             select
             fullWidth
-            label="סוג התראה"
-            value={newNotification.type}
-            onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value })}
-            sx={{ mt: 2, textAlign: 'right' }}
+            label="סטטוס"
+            value={localTask.status}
+            onChange={(e) => handleLocalTaskChange('status', e.target.value)}
+            sx={{ mb: 2, textAlign: 'right' }}
             InputProps={{ style: { textAlign: 'right' } }}
             SelectProps={{ 
               MenuProps: { 
@@ -1116,48 +914,219 @@ const TaskList = ({ user }) => {
               }
             }}
           >
-            <MenuItem value="before_due">לפני תאריך היעד</MenuItem>
-            <MenuItem value="on_date">בתאריך מסוים</MenuItem>
-            <MenuItem value="on_status">בשינוי סטטוס</MenuItem>
+            {Object.entries(TASK_STATUS).map(([key, value]) => (
+              <MenuItem key={key} value={key}>{value}</MenuItem>
+            ))}
           </TextField>
-          {newNotification.type === 'before_due' && (
+          <TextField
+            select
+            fullWidth
+            label="סוג"
+            value={localTask.type}
+            onChange={(e) => handleLocalTaskChange('type', e.target.value)}
+            sx={{ mb: 2, textAlign: 'right' }}
+            InputProps={{ style: { textAlign: 'right' } }}
+            SelectProps={{ 
+              MenuProps: { 
+                anchorOrigin: { vertical: "bottom", horizontal: "right" },
+                transformOrigin: { vertical: "top", horizontal: "right" }
+              }
+            }}
+          >
+            {eventTypes.map((type) => (
+              <MenuItem key={type} value={type}>{type}</MenuItem>
+            ))}
+          </TextField>
+          {localTask.type === 'אחר' && (
             <TextField
-              type="number"
+              margin="dense"
+              label="סוג מותאם אישית"
+              type="text"
               fullWidth
-              label="מספר ימים לפני"
-              value={newNotification.days_before}
-              onChange={(e) => setNewNotification({ ...newNotification, days_before: parseInt(e.target.value) })}
-              InputProps={{ 
-                inputProps: { min: 1, style: { textAlign: 'right' } }
-              }}
-              sx={{ mt: 2 }}
+              value={localTask.customType}
+              onChange={(e) => handleLocalTaskChange('customType', e.target.value)}
+              InputProps={{ style: { textAlign: 'right' } }}
+              sx={{ mb: 2 }}
             />
           )}
-
-          {newNotification.type === 'on_date' && (
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
-              <DatePicker
-                label="תאריך התראה"
-                value={newNotification.notify_date}
-                onChange={(date) => setNewNotification({ ...newNotification, notify_date: date })}
-                sx={{ mt: 2, width: '100%' }}
-                slotProps={{
-                  textField: {
-                    InputProps: { style: { textAlign: 'right' } },
-                    fullWidth: true
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="תאריך יעד"
+              value={localTask.date}
+              onChange={(date) => handleLocalTaskChange('date', date)}
+              sx={{ mb: 2, width: '100%' }}
+              slotProps={{
+                textField: {
+                  InputProps: { style: { textAlign: 'right' } },
+                  fullWidth: true
+                }
+              }}
+            />
+          </LocalizationProvider>
+          <FormControl sx={{ width: '100%', mb: 2 }}>
+            <InputLabel id="task-owner-label">אחראי</InputLabel>
+            <Select
+              labelId="task-owner-label"
+              id="task-owner-select"
+              value={localTask.owner || ''}
+              onChange={(e) => handleLocalTaskChange('owner', e.target.value)}
+              label="אחראי"
+              sx={{ textAlign: 'right' }}
+            >
+              <MenuItem value="">
+                <em>ללא אחראי</em>
+              </MenuItem>
+              {teamMembers.map((member) => (
+                <MenuItem key={member.id} value={member.id}>
+                  {member.name} - {member.role}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>תתי משימות</Typography>
+            <Box sx={{ display: 'flex', mb: 2 }}>
+              <TextField
+                fullWidth
+                label="הוסף תת משימה"
+                value={localSubtask}
+                onChange={(e) => setLocalSubtask(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddSubtask();
                   }
                 }}
+                InputProps={{ 
+                  inputProps: { style: { textAlign: 'right' } },
+                  endAdornment: (
+                    <Button 
+                      variant="outlined"
+                      size="small"
+                      onClick={handleAddSubtask}
+                      sx={{ 
+                        borderRadius: '8px',
+                        minWidth: 'auto',
+                        ml: 1,
+                        '&:hover': {
+                          backgroundColor: 'rgba(25, 118, 210, 0.04)',
+                        }
+                      }}
+                    >
+                      הוסף
+                    </Button>
+                  )
+                }}
+                sx={{ mb: 2 }}
               />
-            </LocalizationProvider>
-          )}
+            </Box>
+            <List dense sx={{ maxHeight: '150px', overflow: 'auto' }}>
+              {localTask.subtasks?.map((subtask, index) => (
+                <ListItem
+                  key={index}
+                  secondaryAction={
+                    <IconButton 
+                      edge="end"
+                      size="small"
+                      onClick={() => handleRemoveSubtask(index)}
+                      sx={{ 
+                        color: 'text.secondary',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  }
+                  sx={{
+                    py: 0.5
+                  }}
+                >
+                  <ListItemText primary={subtask.title} />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={() => setOpenDialog(false)}
+            sx={{ 
+              borderRadius: '8px',
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+              }
+            }}
+          >
+            ביטול
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={handleSave}
+            disabled={!localTask?.title?.trim()}
+            sx={{ 
+              borderRadius: '8px',
+              boxShadow: '0 4px 8px rgba(25, 118, 210, 0.2)',
+              '&:hover': {
+                boxShadow: '0 6px 12px rgba(25, 118, 210, 0.3)',
+              }
+            }}
+          >
+            שמור
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
 
-          {newNotification.type === 'on_status' && (
+  const NotificationDialog = ({ open, onClose, onSave, task, subtaskIndex }) => {
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          style: { direction: 'rtl', borderRadius: '12px' }
+        }}
+      >
+        <DialogTitle sx={{ 
+          borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
+          pb: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <NotificationsIcon sx={{ color: 'primary.main' }} />
+          <Typography variant="h6" sx={{ 
+            fontWeight: 600,
+            color: 'primary.main'
+          }}>
+            הגדרת התראה חדשה
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" sx={{ 
+              mb: 2,
+              p: 1.5,
+              backgroundColor: 'rgba(25, 118, 210, 0.04)',
+              borderRadius: '8px',
+              fontWeight: 500
+            }}>
+              משימה: {task?.title}
+              {subtaskIndex !== null && task?.subtasks[subtaskIndex]?.title && 
+                ` > ${task?.subtasks[subtaskIndex].title}`}
+            </Typography>
+            
             <TextField
               select
               fullWidth
-              label="סטטוס להתראה"
-              value={newNotification.status}
-              onChange={(e) => setNewNotification({ ...newNotification, status: e.target.value })}
+              label="סוג התראה"
+              value={newNotification.type}
+              onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value })}
               sx={{ mt: 2, textAlign: 'right' }}
               InputProps={{ style: { textAlign: 'right' } }}
               SelectProps={{ 
@@ -1167,72 +1136,95 @@ const TaskList = ({ user }) => {
                 }
               }}
             >
-              {Object.entries(TASK_STATUS).map(([key, value]) => (
-                <MenuItem key={key} value={key}>{value}</MenuItem>
-              ))}
+              <MenuItem value="before_due">לפני תאריך היעד</MenuItem>
+              <MenuItem value="on_date">בתאריך מסוים</MenuItem>
+              <MenuItem value="on_status">בשינוי סטטוס</MenuItem>
             </TextField>
-          )}
 
-          <TextField
-            select
-            fullWidth
-            label="שיטת התראה"
-            value={newNotification.notification_method}
-            onChange={(e) => setNewNotification({ ...newNotification, notification_method: e.target.value })}
-            sx={{ mt: 2, textAlign: 'right' }}
-            InputProps={{ style: { textAlign: 'right' } }}
-            SelectProps={{ 
-              MenuProps: { 
-                anchorOrigin: { vertical: "bottom", horizontal: "right" },
-                transformOrigin: { vertical: "top", horizontal: "right" }
+            {newNotification.type === 'before_due' && (
+              <TextField
+                type="number"
+                fullWidth
+                label="מספר ימים לפני"
+                value={newNotification.days_before}
+                onChange={(e) => setNewNotification({ ...newNotification, days_before: parseInt(e.target.value) })}
+                InputProps={{ 
+                  inputProps: { min: 1, style: { textAlign: 'right' } }
+                }}
+                sx={{ mt: 2 }}
+              />
+            )}
+
+            {newNotification.type === 'on_date' && (
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DatePicker
+                  label="תאריך התראה"
+                  value={newNotification.notify_date}
+                  onChange={(date) => setNewNotification({ ...newNotification, notify_date: date })}
+                  sx={{ mt: 2, width: '100%' }}
+                  slotProps={{
+                    textField: {
+                      InputProps: { style: { textAlign: 'right' } },
+                      fullWidth: true
+                    }
+                  }}
+                />
+              </LocalizationProvider>
+            )}
+
+            {newNotification.type === 'on_status' && (
+              <TextField
+                select
+                fullWidth
+                label="סטטוס להתראה"
+                value={newNotification.notify_on_status}
+                onChange={(e) => setNewNotification({ ...newNotification, notify_on_status: e.target.value })}
+                sx={{ mt: 2, textAlign: 'right' }}
+                InputProps={{ style: { textAlign: 'right' } }}
+                SelectProps={{ 
+                  MenuProps: { 
+                    anchorOrigin: { vertical: "bottom", horizontal: "right" },
+                    transformOrigin: { vertical: "top", horizontal: "right" }
+                  }
+                }}
+              >
+                {Object.entries(TASK_STATUS).map(([key, value]) => (
+                  <MenuItem key={key} value={key}>{value}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={onClose}
+            sx={{ 
+              borderRadius: '8px',
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
               }
             }}
           >
-            <MenuItem value="email">אימייל</MenuItem>
-            <MenuItem value="browser">התראת דפדפן</MenuItem>
-            <MenuItem value="both">שניהם</MenuItem>
-          </TextField>
-
-          <TextField
-            select
-            fullWidth
-            label="תדירות"
-            value={newNotification.repeat}
-            onChange={(e) => setNewNotification({ ...newNotification, repeat: e.target.value })}
-            sx={{ mt: 2, textAlign: 'right' }}
-            InputProps={{ style: { textAlign: 'right' } }}
-            SelectProps={{ 
-              MenuProps: { 
-                anchorOrigin: { vertical: "bottom", horizontal: "right" },
-                transformOrigin: { vertical: "top", horizontal: "right" }
+            ביטול
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={onSave}
+            sx={{ 
+              borderRadius: '8px',
+              boxShadow: '0 4px 8px rgba(25, 118, 210, 0.2)',
+              '&:hover': {
+                boxShadow: '0 6px 12px rgba(25, 118, 210, 0.3)',
               }
             }}
           >
-            <MenuItem value="once">פעם אחת</MenuItem>
-            <MenuItem value="daily">כל יום</MenuItem>
-            <MenuItem value="weekly">כל שבוע</MenuItem>
-          </TextField>
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={() => setNotificationDialog(false)}>ביטול</Button>
-        <Button
-          variant="contained"
-          onClick={handleAddNotification}
-          startIcon={<NotificationsIcon />}
-          sx={{ 
-            borderRadius: '8px',
-            boxShadow: '0 4px 8px rgba(25, 118, 210, 0.2)',
-            '&:hover': {
-              boxShadow: '0 6px 12px rgba(25, 118, 210, 0.3)',
-            }
-          }}
-        >
-          הוסף התראה
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
+            הוסף
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -1364,13 +1356,75 @@ const TaskList = ({ user }) => {
       </Box>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-          <CircularProgress />
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '400px',
+          backgroundColor: 'background.paper',
+          borderRadius: '16px',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.06)',
+          p: 4
+        }}>
+          <CircularProgress 
+            size={48} 
+            sx={{ 
+              color: 'primary.main',
+              mb: 2
+            }} 
+          />
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: 'text.secondary',
+              fontWeight: 500
+            }}
+          >
+            טוען משימות...
+          </Typography>
         </Box>
       ) : error ? (
-        <Alert severity="error" sx={{ borderRadius: '8px', mb: 3 }}>{error}</Alert>
-      ) : tasks.length === 0 ? (
-        <Alert severity="info" sx={{ borderRadius: '8px', mb: 3 }}>אין משימות</Alert>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '400px',
+          backgroundColor: 'background.paper',
+          borderRadius: '16px',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.06)',
+          p: 4
+        }}>
+          <Alert 
+            severity="warning" 
+            sx={{ 
+              borderRadius: '8px', 
+              mb: 2,
+              width: '100%',
+              maxWidth: '500px'
+            }}
+          >
+            {error}
+          </Alert>
+          <Button
+            variant="contained"
+            onClick={() => window.location.reload()}
+            sx={{ 
+              borderRadius: '8px',
+              boxShadow: '0 4px 8px rgba(25, 118, 210, 0.15)',
+              padding: '8px 24px',
+              fontWeight: 600,
+              '&:hover': {
+                boxShadow: '0 6px 12px rgba(25, 118, 210, 0.25)',
+                transform: 'translateY(-2px)'
+              },
+              transition: 'all 0.2s'
+            }}
+          >
+            טען מחדש
+          </Button>
+        </Box>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
           <Grid container spacing={3}>
@@ -1388,16 +1442,20 @@ const TaskList = ({ user }) => {
                   <CardContent>
                     <Box sx={{ 
                       display: 'flex', 
-                      justifyContent: 'space-between', 
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       mb: 2 
                     }}>
-                      <Typography variant="h6" sx={{ 
-                        fontWeight: 600,
-                        color: status === 'DONE' ? 'success.dark' :
-                              status === 'IN_PROGRESS' ? 'warning.dark' :
-                              'info.dark',
-                      }}>
+                      <Typography 
+                        variant="h6" 
+                        component="div" 
+                        sx={{ 
+                          fontWeight: 600,
+                          color: status === 'DONE' ? 'success.dark' :
+                                status === 'IN_PROGRESS' ? 'warning.dark' :
+                                'info.dark',
+                        }}
+                      >
                         {TASK_STATUS[status]}
                       </Typography>
                       <Chip
@@ -1408,7 +1466,7 @@ const TaskList = ({ user }) => {
                                         status === 'IN_PROGRESS' ? 'warning.light' :
                                         'info.light',
                           color: '#fff',
-                          fontWeight: 'bold',
+                          fontWeight: 500
                         }}
                       />
                     </Box>
@@ -1499,12 +1557,13 @@ const TaskList = ({ user }) => {
                                                 title: task.title,
                                                 description: task.description || '',
                                                 status: task.status || 'TODO',
-                                                priority: task.priority || 'MEDIUM',
-                                                due_date: task.due_date ? new Date(task.due_date) : null,
+                                                type: task.type || 'משימה',
+                                                customType: task.type === 'אחר' ? task.type : '',
+                                                date: task.due_date ? new Date(task.due_date) : null,
                                                 owner: task.owner || '',
                                                 subtasks: task.subtasks || []
                                               });
-                                              setTaskDialog(true);
+                                              setOpenDialog(true);
                                             }}
                                             sx={{ 
                                               color: 'primary.main',
@@ -1517,24 +1576,6 @@ const TaskList = ({ user }) => {
                                             }}
                                           >
                                             <EditIcon fontSize="small" />
-                                          </IconButton>
-                                          <IconButton 
-                                            size="small" 
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDeleteClick(task.id);
-                                            }}
-                                            sx={{ 
-                                              color: 'error.main',
-                                              backgroundColor: 'rgba(211, 47, 47, 0.04)',
-                                              '&:hover': {
-                                                backgroundColor: 'rgba(211, 47, 47, 0.12)',
-                                              },
-                                              transition: 'all 0.2s',
-                                              padding: '4px',
-                                            }}
-                                          >
-                                            <DeleteIcon fontSize="small" />
                                           </IconButton>
                                           <IconButton
                                             size="small"
@@ -1555,6 +1596,24 @@ const TaskList = ({ user }) => {
                                             }}
                                           >
                                             <NotificationsIcon fontSize="small" />
+                                          </IconButton>
+                                          <IconButton 
+                                            size="small" 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteClick(task.id);
+                                            }}
+                                            sx={{ 
+                                              color: 'error.main',
+                                              backgroundColor: 'rgba(211, 47, 47, 0.04)',
+                                              '&:hover': {
+                                                backgroundColor: 'rgba(211, 47, 47, 0.12)',
+                                              },
+                                              transition: 'all 0.2s',
+                                              padding: '4px',
+                                            }}
+                                          >
+                                            <DeleteIcon fontSize="small" />
                                           </IconButton>
                                         </Box>
                                       </Box>
@@ -1599,21 +1658,6 @@ const TaskList = ({ user }) => {
                                                   '& .MuiChip-icon': {
                                                     color: 'primary.main'
                                                   }
-                                                }}
-                                              />
-                                            </Tooltip>
-                                          )}
-                                          
-                                          {task.priority && (
-                                            <Tooltip title="עדיפות">
-                                              <Chip
-                                                label={PRIORITY_LABELS[task.priority]}
-                                                size="small"
-                                                sx={{ 
-                                                  backgroundColor: getPriorityColor(task.priority, 0.1),
-                                                  color: getPriorityColor(task.priority),
-                                                  borderRadius: '16px',
-                                                  fontWeight: 500
                                                 }}
                                               />
                                             </Tooltip>
@@ -1751,9 +1795,22 @@ const TaskList = ({ user }) => {
           </Grid>
         </DragDropContext>
       )}
-      <TaskDialog />
-      <DeleteConfirmDialog />
-      <NotificationDialog />
+      <TaskDialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        task={selectedTask || newTask}
+        onSave={handleSaveTask}
+        onDelete={handleDeleteTask}
+        teamMembers={teamMembers}
+      />
+      
+      <NotificationDialog
+        open={notificationDialog}
+        onClose={() => setNotificationDialog(false)}
+        onSave={handleAddNotification}
+        task={selectedNotificationTask}
+        subtaskIndex={selectedSubtaskIndex}
+      />
     </Box>
   );
 };
