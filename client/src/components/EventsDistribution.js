@@ -19,7 +19,8 @@ import {
   Alert,
   Tooltip as MuiTooltip,
   Stack,
-  InputAdornment
+  InputAdornment,
+  Autocomplete
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -146,6 +147,7 @@ function EventsDistribution() {
     open: false,
     chartType: null
   });
+  const [selectedSettlement, setSelectedSettlement] = useState(null);
 
   useEffect(() => {
     fetchEvents();
@@ -342,14 +344,9 @@ function EventsDistribution() {
 
   const fetchEvents = async () => {
     try {
-      const startDate = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0];
-      const endDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('events')
         .select('*')
-        .gte('start_date', startDate)
-        .lte('start_date', endDate)
         .order('start_date', { ascending: false });
 
       if (error) throw error;
@@ -417,21 +414,6 @@ function EventsDistribution() {
         setAlert({
           open: true,
           message: 'אנא מלא את כל שדות החובה',
-          severity: 'error',
-          action: null
-        });
-        return;
-      }
-
-      // וידוא שהתאריך בטווח החודש הנבחר
-      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
-      const endDate = new Date(selectedYear, selectedMonth, 0);
-      const eventDate = new Date(newEvent.date);
-
-      if (eventDate < startDate || eventDate > endDate) {
-        setAlert({
-          open: true,
-          message: `התאריך חייב להיות בין ${formatDateToHebrew(startDate)} ל-${formatDateToHebrew(endDate)}`,
           severity: 'error',
           action: null
         });
@@ -605,7 +587,7 @@ function EventsDistribution() {
   // הגדרת עמודות הטבלה
   const columns = [
     {
-      field: 'name',
+      field: 'title',
       headerName: 'שם האירוע',
       flex: 1,
       minWidth: 200,
@@ -627,7 +609,7 @@ function EventsDistribution() {
       )
     },
     {
-      field: 'date',
+      field: 'start_date',
       headerName: 'תאריך',
       flex: 1,
       minWidth: 150,
@@ -1474,12 +1456,12 @@ function EventsDistribution() {
             const { text, participants } = parseEventDescription(event.description);
             return {
               id: event.id,
-              name: event.title,
+              title: event.title,
               type: event.type,
-              date: formatDateToHebrew(event.start_date),
+              start_date: formatDateToHebrew(event.start_date),
               totalParticipants: Object.values(participants).reduce((sum, count) => sum + count, 0),
               participants: participants,
-              budget: event.budget || 0,
+              budget: event.budget,
               description: text
             };
           })}
@@ -1676,29 +1658,79 @@ function EventsDistribution() {
               <Typography variant="subtitle1" sx={{ mb: 2, fontFamily: 'Rubik, sans-serif' }}>
                 משתתפים לפי יישוב
               </Typography>
+              <Autocomplete
+                options={settlements}
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    label="חפש ישוב" 
+                    fullWidth
+                    sx={{ 
+                      '& .MuiInputLabel-root': {
+                        fontFamily: 'Rubik, sans-serif'
+                      },
+                      '& .MuiInputBase-root': {
+                        fontFamily: 'Rubik, sans-serif'
+                      }
+                    }}
+                  />
+                )}
+                onChange={(_, selectedSettlement) => {
+                  if (selectedSettlement) {
+                    setSelectedSettlement(selectedSettlement);
+                  }
+                }}
+                sx={{ mb: 2 }}
+              />
+              {selectedSettlement && (
+                <TextField
+                  fullWidth
+                  label={`כמות משתתפים מ${selectedSettlement}`}
+                  type="number"
+                  value={newEvent.participants[selectedSettlement] || 0}
+                  onChange={(e) => handleParticipantChange(selectedSettlement, Number(e.target.value))}
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiInputLabel-root': {
+                      fontFamily: 'Rubik, sans-serif'
+                    },
+                    '& .MuiInputBase-root': {
+                      fontFamily: 'Rubik, sans-serif'
+                    }
+                  }}
+                />
+              )}
+              <Typography variant="subtitle2" sx={{ mb: 1, fontFamily: 'Rubik, sans-serif' }}>
+                ישובים עם משתתפים:
+              </Typography>
               <Grid container spacing={2}>
-                {settlements.map(settlement => (
-                  <Grid item xs={12} sm={6} md={4} key={settlement}>
-                    <TextField
-                      fullWidth
-                      label={settlement}
-                      type="number"
-                      value={newEvent.participants[settlement] || 0}
-                      onChange={(e) => handleParticipantChange(settlement, Number(e.target.value))}
-                      InputProps={{
-                        inputProps: { min: 0 }
-                      }}
-                      sx={{ 
-                        '& .MuiInputLabel-root': {
-                          fontFamily: 'Rubik, sans-serif'
-                        },
-                        '& .MuiInputBase-root': {
-                          fontFamily: 'Rubik, sans-serif'
-                        }
-                      }}
-                    />
-                  </Grid>
-                ))}
+                {Object.entries(newEvent.participants)
+                  .filter(([_, count]) => count > 0)
+                  .map(([settlement, count]) => (
+                    <Grid item xs={12} sm={6} md={4} key={settlement}>
+                      <Paper 
+                        elevation={1} 
+                        sx={{ 
+                          p: 1, 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Typography variant="body2">{settlement}: {count}</Typography>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleParticipantChange(settlement, 0)}
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Paper>
+                    </Grid>
+                  ))}
               </Grid>
             </Grid>
           </Grid>
