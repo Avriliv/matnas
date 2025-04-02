@@ -53,8 +53,7 @@ function EquipmentTracker() {
     borrower_name: '',
     notes: '',
     signature: null,
-    event_id: '', // מזהה אירוע
-    new_event_name: '' // שם אירוע חדש
+    event_name: ''
   });
   const [errors, setErrors] = useState({});
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'success' });
@@ -62,13 +61,14 @@ function EquipmentTracker() {
   const [selectedTab, setSelectedTab] = useState(0);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
-  const [events, setEvents] = useState([]); // רשימת אירועים
   const [expandedEvents, setExpandedEvents] = useState({}); // מצב פתיחה/סגירה של אירועים
   const [selectedItems, setSelectedItems] = useState([]); // פריטים שנבחרו לעריכה מרובה
   const [bulkEditOpen, setBulkEditOpen] = useState(false); // דיאלוג עריכה מרובה
   const [bulkEditEvent, setBulkEditEvent] = useState(''); // אירוע שנבחר לעריכה מרובה
   const [bulkEditNewEventName, setBulkEditNewEventName] = useState(''); // שם אירוע חדש לעריכה מרובה
   const [selectAllVisible, setSelectAllVisible] = useState(false); // האם להציג את כפתור "סמן הכל"
+  const [multipleItems, setMultipleItems] = useState(false); // האם להוסיף מספר פריטים בבת אחת
+  const [itemsList, setItemsList] = useState([{ name: '', quantity: 1 }]); // רשימת פריטים להוספה מרובה
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -117,38 +117,6 @@ function EquipmentTracker() {
         signature = signatureRef.current.toDataURL();
       }
 
-      // בדיקה אם נוצר אירוע חדש
-      let eventId = newItem.event_id;
-      if (newItem.new_event_name && newItem.new_event_name.trim() !== '') {
-        // יצירת אירוע חדש
-        const { data: newEvent, error: eventError } = await supabase
-          .from('events')
-          .insert({
-            title: newItem.new_event_name.trim(),
-            start_date: new Date().toISOString().split('T')[0],
-            end_date: new Date().toISOString().split('T')[0],
-            event_type: 'אחר',
-            created_at: new Date().toISOString()
-          })
-          .select();
-
-        if (eventError) {
-          console.error('Error creating new event:', eventError);
-          setAlert({
-            open: true,
-            message: 'שגיאה ביצירת אירוע חדש',
-            severity: 'error'
-          });
-          return;
-        }
-
-        if (newEvent && newEvent.length > 0) {
-          eventId = newEvent[0].id;
-          // עדכון רשימת האירועים
-          fetchEvents();
-        }
-      }
-
       if (newItem.id) {
         // עדכון פריט קיים
         const { error } = await supabase
@@ -161,7 +129,7 @@ function EquipmentTracker() {
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_id: eventId || null
+            event_name: newItem.event_name?.trim() || ''
           })
           .eq('id', newItem.id);
 
@@ -181,35 +149,80 @@ function EquipmentTracker() {
           severity: 'success'
         });
       } else {
-        // הוספת פריט חדש
-        const { data, error } = await supabase
-          .from('equipment_tracking')
-          .insert({
-            item_name: newItem.item_name.trim(),
-            quantity: newItem.quantity,
+        if (multipleItems) {
+          // הוספת מספר פריטים בבת אחת
+          const itemsToAdd = itemsList.filter(item => item.name.trim() !== '');
+          
+          if (itemsToAdd.length === 0) {
+            setAlert({
+              open: true,
+              message: 'יש להזין לפחות פריט אחד',
+              severity: 'warning'
+            });
+            return;
+          }
+          
+          const items = itemsToAdd.map(item => ({
+            item_name: item.name.trim(),
+            quantity: item.quantity,
             checkout_date: newItem.checkout_date,
             staff_member: newItem.staff_member.trim(),
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_id: eventId || null
-          });
+            event_name: newItem.event_name?.trim() || ''
+          }));
+          
+          const { data, error } = await supabase
+            .from('equipment_tracking')
+            .insert(items);
 
-        if (error) {
-          console.error('Error adding item:', error);
+          if (error) {
+            console.error('Error adding items:', error);
+            setAlert({
+              open: true,
+              message: 'שגיאה בהוספת הפריטים',
+              severity: 'error'
+            });
+            return;
+          }
+
           setAlert({
             open: true,
-            message: 'שגיאה בהוספת הפריט',
-            severity: 'error'
+            message: `${items.length} פריטים נוספו בהצלחה`,
+            severity: 'success'
           });
-          return;
-        }
+        } else {
+          // הוספת פריט בודד
+          const { data, error } = await supabase
+            .from('equipment_tracking')
+            .insert({
+              item_name: newItem.item_name.trim(),
+              quantity: newItem.quantity,
+              checkout_date: newItem.checkout_date,
+              staff_member: newItem.staff_member.trim(),
+              borrower_name: newItem.borrower_name.trim(),
+              notes: newItem.notes?.trim() || '',
+              borrower_signature: signature,
+              event_name: newItem.event_name?.trim() || ''
+            });
 
-        setAlert({
-          open: true,
-          message: 'הפריט נוסף בהצלחה',
-          severity: 'success'
-        });
+          if (error) {
+            console.error('Error adding item:', error);
+            setAlert({
+              open: true,
+              message: 'שגיאה בהוספת הפריט',
+              severity: 'error'
+            });
+            return;
+          }
+
+          setAlert({
+            open: true,
+            message: 'הפריט נוסף בהצלחה',
+            severity: 'success'
+          });
+        }
       }
 
       fetchEquipment();
@@ -235,9 +248,10 @@ function EquipmentTracker() {
       borrower_name: '',
       notes: '',
       signature: null,
-      event_id: '',
-      new_event_name: ''
+      event_name: ''
     });
+    setMultipleItems(false);
+    setItemsList([{ name: '', quantity: 1 }]);
     if (signatureRef.current) {
       signatureRef.current.clear();
     }
@@ -261,7 +275,7 @@ function EquipmentTracker() {
       borrower_name: item.borrower_name,
       notes: item.notes || '',
       signature: item.borrower_signature,
-      event_id: item.event_id || ''
+      event_name: item.event_name || ''
     });
     setOpenDialog(true);
   };
@@ -379,16 +393,15 @@ function EquipmentTracker() {
 
     // קיבוץ פריטים לפי אירוע
     equipmentList.forEach(item => {
-      if (item.event_id) {
-        if (!grouped[item.event_id]) {
-          const event = events.find(e => e.id === item.event_id);
-          grouped[item.event_id] = {
-            id: item.event_id,
-            title: event ? event.title : 'אירוע לא ידוע',
+      if (item.event_name && item.event_name.trim() !== '') {
+        if (!grouped[item.event_name]) {
+          grouped[item.event_name] = {
+            id: item.event_name,
+            title: item.event_name,
             items: []
           };
         }
-        grouped[item.event_id].items.push(item);
+        grouped[item.event_name].items.push(item);
       } else {
         noEventItems.push(item);
       }
@@ -407,15 +420,7 @@ function EquipmentTracker() {
     }
 
     return result;
-  }, [events]);
-
-  const toggleEventExpand = (eventId) => {
-    setExpandedEvents(prev => ({
-      ...prev,
-      [eventId]: !prev[eventId]
-    }));
-  };
-
+  }, []);
   const groupedBorrowedEquipment = groupEquipmentByEvent(borrowedEquipment);
   const groupedReturnedEquipment = groupEquipmentByEvent(returnedEquipment);
 
@@ -423,48 +428,6 @@ function EquipmentTracker() {
     setSelectedTab(newValue);
   };
 
-  const fetchEvents = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*');
-
-      if (error) {
-        console.error('Error fetching events:', error);
-        return;
-      }
-
-      setEvents(data || []);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
-
-  const validateForm = () => {
-    const errors = {};
-    if (!newItem.item_name || newItem.item_name.trim() === '') {
-      errors.item_name = 'שם הפריט נדרש';
-    }
-    if (!newItem.borrower_name || newItem.borrower_name.trim() === '') {
-      errors.borrower_name = 'שם השואל נדרש';
-    }
-    if (!newItem.staff_member || newItem.staff_member.trim() === '') {
-      errors.staff_member = 'שם איש הצוות נדרש';
-    }
-    if (!newItem.checkout_date) {
-      errors.checkout_date = 'תאריך משיכה נדרש';
-    }
-    if (newItem.event_id === 'new' && (!newItem.new_event_name || newItem.new_event_name.trim() === '')) {
-      errors.new_event_name = 'שם האירוע החדש נדרש';
-    }
-    return errors;
-  };
-
-  // פונקציה לטיפול בבחירת פריט לעריכה מרובה
   const handleSelectItem = (itemId) => {
     setSelectedItems(prev => {
       if (prev.includes(itemId)) {
@@ -480,7 +443,6 @@ function EquipmentTracker() {
     });
   };
 
-  // פונקציה לבחירת כל הפריטים
   const handleSelectAll = (groupId = null) => {
     // אם groupId מוגדר, בחר רק את הפריטים מהקבוצה הזו
     // אחרת, בחר את כל הפריטים מכל הקבוצות שפתוחות
@@ -510,13 +472,11 @@ function EquipmentTracker() {
     setSelectedItems(itemsToSelect);
   };
 
-  // פונקציה לביטול בחירת כל הפריטים
   const handleDeselectAll = () => {
     setSelectedItems([]);
     setSelectAllVisible(false);
   };
 
-  // פונקציה לפתיחת דיאלוג עריכה מרובה
   const handleOpenBulkEdit = () => {
     if (selectedItems.length === 0) {
       setAlert({
@@ -529,14 +489,12 @@ function EquipmentTracker() {
     setBulkEditOpen(true);
   };
 
-  // פונקציה לסגירת דיאלוג עריכה מרובה
   const handleCloseBulkEdit = () => {
     setBulkEditOpen(false);
     setBulkEditEvent('');
     setBulkEditNewEventName('');
   };
 
-  // פונקציה לשמירת עריכה מרובה
   const handleSaveBulkEdit = async () => {
     try {
       if (bulkEditEvent === '' && (!bulkEditNewEventName || bulkEditNewEventName.trim() === '')) {
@@ -556,10 +514,10 @@ function EquipmentTracker() {
         const { data: newEvent, error: eventError } = await supabase
           .from('events')
           .insert({
-            title: bulkEditNewEventName.trim(),
-            start_date: new Date().toISOString().split('T')[0],
-            end_date: new Date().toISOString().split('T')[0],
-            event_type: 'אחר',
+            name: bulkEditNewEventName.trim(),
+            type: 'אחר',
+            date: new Date().toISOString().split('T')[0],
+            supplier: '',
             created_at: new Date().toISOString()
           })
           .select();
@@ -577,20 +535,20 @@ function EquipmentTracker() {
         if (newEvent && newEvent.length > 0) {
           eventId = newEvent[0].id;
           // עדכון רשימת האירועים
-          fetchEvents();
+          // fetchEvents();
         }
       }
 
       // בדיקה אם עמודת event_id קיימת
       const { data: testData, error: testError } = await supabase
         .from('equipment_tracking')
-        .select('event_id')
+        .select('event_name')
         .limit(1);
 
-      if (testError && testError.message && testError.message.includes("column \"event_id\" does not exist")) {
+      if (testError && testError.message && testError.message.includes("column \"event_name\" does not exist")) {
         setAlert({
           open: true,
-          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_id',
+          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_name',
           severity: 'error'
         });
         return;
@@ -612,7 +570,7 @@ function EquipmentTracker() {
       for (const batch of batches) {
         const { error } = await supabase
           .from('equipment_tracking')
-          .update({ event_id: eventId })
+          .update({ event_name: eventId })
           .in('id', batch);
           
         if (error) {
@@ -621,8 +579,8 @@ function EquipmentTracker() {
           
           // בדיקה אם השגיאה היא שהעמודה לא קיימת
           if (error.message && (
-              error.message.includes("Could not find the 'event_id' column") || 
-              error.message.includes("column \"event_id\" does not exist")
+              error.message.includes("Could not find the 'event_name' column") || 
+              error.message.includes("column \"event_name\" does not exist")
           )) {
             columnNotFoundError = true;
             break; // אין טעם להמשיך אם העמודה לא קיימת
@@ -633,7 +591,7 @@ function EquipmentTracker() {
       if (columnNotFoundError) {
         setAlert({
           open: true,
-          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_id',
+          message: 'לא ניתן לשייך פריטים לאירוע. נדרשת הרצת מיגרציה להוספת עמודת event_name',
           severity: 'error'
         });
         return;
@@ -667,6 +625,36 @@ function EquipmentTracker() {
         severity: 'error'
       });
     }
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    if (!multipleItems && (!newItem.item_name || newItem.item_name.trim() === '')) {
+      errors.item_name = 'שם הפריט נדרש';
+    }
+    if (!newItem.borrower_name || newItem.borrower_name.trim() === '') {
+      errors.borrower_name = 'שם השואל נדרש';
+    }
+    if (!newItem.staff_member || newItem.staff_member.trim() === '') {
+      errors.staff_member = 'שם איש הצוות נדרש';
+    }
+    if (!newItem.checkout_date) {
+      errors.checkout_date = 'תאריך משיכה נדרש';
+    }
+    if (multipleItems) {
+      const validItems = itemsList.filter(item => item.name.trim() !== '');
+      if (validItems.length === 0) {
+        errors.items = 'יש להזין לפחות פריט אחד';
+      }
+    }
+    return errors;
+  };
+
+  const toggleEventExpand = (eventId) => {
+    setExpandedEvents(prev => ({
+      ...prev,
+      [eventId]: !prev[eventId]
+    }));
   };
 
   return (
@@ -875,57 +863,114 @@ function EquipmentTracker() {
               InputLabelProps={{ shrink: true }}
             />
 
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="event-label">אירוע</InputLabel>
-              <Select
-                labelId="event-label"
-                value={newItem.event_id}
-                onChange={(e) => setNewItem({ ...newItem, event_id: e.target.value })}
-                label="אירוע"
-              >
-                <MenuItem value="">בחר אירוע</MenuItem>
-                {events.map((event) => (
-                  <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
-                ))}
-                <MenuItem value="new" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                  הוסף אירוע חדש...
-                </MenuItem>
-              </Select>
-            </FormControl>
+            <TextField
+              label="אירוע"
+              fullWidth
+              value={newItem.event_name}
+              onChange={(e) => setNewItem({ ...newItem, event_name: e.target.value })}
+              sx={{ mb: 2 }}
+              placeholder="הזן שם אירוע"
+            />
 
-            {newItem.event_id === 'new' && (
-              <TextField
-                label="שם האירוע החדש"
-                fullWidth
-                value={newItem.new_event_name}
-                onChange={(e) => setNewItem({ ...newItem, new_event_name: e.target.value })}
-                error={!!errors.new_event_name}
-                helperText={errors.new_event_name}
-                sx={{ mb: 2 }}
-              />
+            {!newItem.id && (
+              <Box sx={{ mb: 2 }}>
+                <FormControl component="fieldset">
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Checkbox
+                      checked={multipleItems}
+                      onChange={(e) => setMultipleItems(e.target.checked)}
+                      inputProps={{ 'aria-label': 'הוסף מספר פריטים' }}
+                    />
+                    <Typography>הוסף מספר פריטים בבת אחת</Typography>
+                  </Box>
+                </FormControl>
+              </Box>
             )}
 
-            <TextField
-              label="שם הפריט"
-              fullWidth
-              value={newItem.item_name}
-              onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-              error={!!errors.item_name}
-              helperText={errors.item_name}
-              sx={{ mb: 2 }}
-            />
+            {!multipleItems ? (
+              <TextField
+                label="שם הפריט"
+                fullWidth
+                value={newItem.item_name}
+                onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                error={!!errors.item_name}
+                helperText={errors.item_name}
+                sx={{ mb: 2 }}
+              />
+            ) : (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" component="div" sx={{ mb: 1 }}>
+                  פריטים
+                </Typography>
+                {itemsList.map((item, index) => (
+                  <Box key={index} sx={{ display: 'flex', gap: 2, mb: 1 }}>
+                    <TextField
+                      label="שם הפריט"
+                      fullWidth
+                      value={item.name}
+                      onChange={(e) => {
+                        const newList = [...itemsList];
+                        newList[index].name = e.target.value;
+                        setItemsList(newList);
+                      }}
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <TextField
+                      label="כמות"
+                      type="number"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const newList = [...itemsList];
+                        newList[index].quantity = parseInt(e.target.value) || 1;
+                        setItemsList(newList);
+                      }}
+                      InputProps={{ inputProps: { min: 1 } }}
+                      sx={{ width: '100px' }}
+                    />
+                    <IconButton 
+                      color="error" 
+                      onClick={() => {
+                        if (itemsList.length > 1) {
+                          const newList = [...itemsList];
+                          newList.splice(index, 1);
+                          setItemsList(newList);
+                        }
+                      }}
+                      disabled={itemsList.length === 1}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setItemsList([...itemsList, { name: '', quantity: 1 }])}
+                  sx={{ mt: 1 }}
+                >
+                  הוסף פריט נוסף
+                </Button>
+                {errors.items && (
+                  <Typography color="error" variant="caption" display="block" sx={{ mt: 1 }}>
+                    {errors.items}
+                  </Typography>
+                )}
+              </Box>
+            )}
 
-            <TextField
-              label="כמות"
-              type="number"
-              fullWidth
-              value={newItem.quantity}
-              onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 1 })}
-              error={!!errors.quantity}
-              helperText={errors.quantity}
-              sx={{ mb: 2 }}
-              InputProps={{ inputProps: { min: 1 } }}
-            />
+            {!multipleItems && (
+              <TextField
+                label="כמות"
+                type="number"
+                fullWidth
+                value={newItem.quantity}
+                onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 1 })}
+                error={!!errors.quantity}
+                helperText={errors.quantity}
+                sx={{ mb: 2 }}
+                InputProps={{ inputProps: { min: 1 } }}
+              />
+            )}
 
             <Box sx={{ mb: 2 }}>
               <Typography variant="h6" component="div" sx={{ mb: 1 }}>
@@ -998,9 +1043,6 @@ function EquipmentTracker() {
                 label="אירוע"
               >
                 <MenuItem value="">בחר אירוע</MenuItem>
-                {events.map((event) => (
-                  <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
-                ))}
                 <MenuItem value="new" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                   הוסף אירוע חדש...
                 </MenuItem>
