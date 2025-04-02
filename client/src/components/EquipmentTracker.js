@@ -702,6 +702,7 @@ function EquipmentTracker() {
           </Button>
           <ExportButtons
             data={equipment}
+            columns={exportColumns}
             filename="equipment_tracking"
             sheetName="ציוד"
           />

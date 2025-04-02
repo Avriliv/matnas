@@ -89,7 +89,7 @@ const ExportButtons = ({ data, filename, columns }) => {
           </tr>
         </thead>
         <tbody>
-          ${data.map(item => `
+          ${data && data.length > 0 ? data.map(item => `
             <tr>
               ${columns.map(col => `
                 <td style="
@@ -101,7 +101,7 @@ const ExportButtons = ({ data, filename, columns }) => {
                 ">${formatValue(item[col.field], col.field)}</td>
               `).join('')}
             </tr>
-          `).join('')}
+          `).join('') : '<tr><td colspan="' + columns.length + '" style="text-align: center; padding: 10px;">אין נתונים להצגה</td></tr>'}
         </tbody>
       </table>
     `;
