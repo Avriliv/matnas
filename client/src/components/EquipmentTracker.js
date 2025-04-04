@@ -376,7 +376,23 @@ function EquipmentTracker() {
     return new Date(date).toLocaleDateString('he-IL');
   };
 
-  const exportData = equipment.map(item => ({
+  const currentEquipment = selectedTab === 0
+    ? equipment.filter(item => !item.return_date)
+    : equipment.filter(item => item.return_date);
+
+  const groupByEvent = currentEquipment.reduce((groups, item) => {
+    const eventName = item.event_name || 'ללא שם אירוע';
+    if (!groups[eventName]) {
+      groups[eventName] = [];
+    }
+    groups[eventName].push(item);
+    return groups;
+  }, {});
+
+  const events = Object.keys(groupByEvent);
+  const selectedEvent = events[0] || ''; // בחירת האירוע הראשון כברירת מחדל
+
+  const exportData = currentEquipment.map(item => ({
     ...item,
     checkout_date: formatDate(item.checkout_date),
     return_date: formatDate(item.return_date)
@@ -701,10 +717,16 @@ function EquipmentTracker() {
             הוסף פריט
           </Button>
           <ExportButtons
-            data={equipment}
-            columns={exportColumns}
-            filename="equipment_tracking"
-            sheetName="ציוד"
+            data={currentEquipment}
+            filename={`${selectedEvent} - ציוד ${selectedTab === 0 ? 'מושאל' : 'שהוחזר'}`}
+            columns={[
+              { field: 'item_name', headerName: 'שם הפריט' },
+              { field: 'quantity', headerName: 'כמות' },
+              { field: 'borrower_name', headerName: 'שואל' },
+              { field: 'checkout_date', headerName: 'תאריך השאלה' },
+              { field: 'staff_member', headerName: 'אחראי' },
+              { field: 'notes', headerName: 'הערות' }
+            ]}
           />
         </Box>
       </Box>
