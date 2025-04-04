@@ -69,6 +69,7 @@ function EquipmentTracker() {
   const [selectAllVisible, setSelectAllVisible] = useState(false); // האם להציג את כפתור "סמן הכל"
   const [multipleItems, setMultipleItems] = useState(false); // האם להוסיף מספר פריטים בבת אחת
   const [itemsList, setItemsList] = useState([{ name: '', quantity: 1 }]); // רשימת פריטים להוספה מרובה
+  const [existingEvents, setExistingEvents] = useState([]); // רשימת האירועים הייחודיים
 
   const fetchEquipment = useCallback(async () => {
     try {
@@ -82,6 +83,10 @@ function EquipmentTracker() {
         throw error;
       }
       setEquipment(data || []);
+      
+      // עדכון רשימת האירועים הייחודיים
+      const uniqueEvents = [...new Set(data.map(item => item.event_name).filter(Boolean))];
+      setExistingEvents(uniqueEvents);
     } catch (error) {
       console.error('Error fetching equipment:', error);
       setAlert({ open: true, message: 'שגיאה בטעינת הציוד', severity: 'error' });
@@ -117,6 +122,9 @@ function EquipmentTracker() {
         signature = signatureRef.current.toDataURL();
       }
 
+      // שימוש בשם האירוע החדש אם נבחר "אירוע חדש"
+      const finalEventName = newItem.event_name === "" ? newItem.new_event_name : newItem.event_name;
+
       if (newItem.id) {
         // עדכון פריט קיים
         const { error } = await supabase
@@ -129,7 +137,7 @@ function EquipmentTracker() {
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_name: newItem.event_name?.trim() || ''
+            event_name: finalEventName?.trim() || ''
           })
           .eq('id', newItem.id);
 
@@ -170,7 +178,7 @@ function EquipmentTracker() {
             borrower_name: newItem.borrower_name.trim(),
             notes: newItem.notes?.trim() || '',
             borrower_signature: signature,
-            event_name: newItem.event_name?.trim() || ''
+            event_name: finalEventName?.trim() || ''
           }));
           
           const { data, error } = await supabase
@@ -204,7 +212,7 @@ function EquipmentTracker() {
               borrower_name: newItem.borrower_name.trim(),
               notes: newItem.notes?.trim() || '',
               borrower_signature: signature,
-              event_name: newItem.event_name?.trim() || ''
+              event_name: finalEventName?.trim() || ''
             });
 
           if (error) {
@@ -673,6 +681,25 @@ function EquipmentTracker() {
     }));
   };
 
+  const handleAddClick = () => {
+    // מציאת האירוע האחרון שהוזן
+    const lastEvent = equipment
+      .filter(item => item.event_name) // סינון פריטים עם שם אירוע
+      .sort((a, b) => new Date(b.checkout_date) - new Date(a.checkout_date))[0]; // מיון לפי תאריך השאלה
+
+    setNewItem({
+      item_name: '',
+      quantity: 1,
+      checkout_date: new Date().toISOString().split('T')[0],
+      staff_member: '',
+      borrower_name: '',
+      notes: '',
+      signature: null,
+      event_name: lastEvent ? lastEvent.event_name : '' // שימוש בשם האירוע האחרון אם קיים
+    });
+    setOpenDialog(true);
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -711,7 +738,7 @@ function EquipmentTracker() {
           <Button
             variant="contained"
             color="primary"
-            onClick={handleOpenDialog}
+            onClick={handleAddClick}
             startIcon={<AddIcon />}
           >
             הוסף פריט
@@ -886,15 +913,35 @@ function EquipmentTracker() {
               InputLabelProps={{ shrink: true }}
             />
 
-            <TextField
-              label="אירוע"
-              fullWidth
-              value={newItem.event_name}
-              onChange={(e) => setNewItem({ ...newItem, event_name: e.target.value })}
-              sx={{ mb: 2 }}
-              placeholder="הזן שם אירוע"
-            />
-
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>שם האירוע</InputLabel>
+              <Select
+                value={newItem.event_name}
+                onChange={(e) => setNewItem({ ...newItem, event_name: e.target.value })}
+                label="שם האירוע"
+              >
+                <MenuItem value="">
+                  <em>אירוע חדש</em>
+                </MenuItem>
+                {existingEvents.map((event) => (
+                  <MenuItem key={event} value={event}>
+                    {event}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {newItem.event_name === "" && (
+              <TextField
+                fullWidth
+                label="שם אירוע חדש"
+                name="new_event_name"
+                value={newItem.new_event_name || ""}
+                onChange={(e) => setNewItem({ ...newItem, new_event_name: e.target.value })}
+                error={!!errors.event_name}
+                helperText={errors.event_name}
+                sx={{ mb: 2 }}
+              />
+            )}
             {!newItem.id && (
               <Box sx={{ mb: 2 }}>
                 <FormControl component="fieldset">
